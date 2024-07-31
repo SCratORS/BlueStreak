@@ -202,7 +202,7 @@ function progressError(event) {
 
 function uploadMedia(element) {
   const file = element.files[0];
-  if (uploading) alert("Дождитесь окончания предыдущей загузки.");
+  if (uploading) alert("Дождитесь окончания предыдущей загрузки.");
   if (!file) return;
   if (file.size > 4 * BYTES_IN_MB) {
     alert('Очень большой файл.')
