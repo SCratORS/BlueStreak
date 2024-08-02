@@ -1,0 +1,162 @@
+{
+   "name": "Домофон",
+   "manufacturer": "SCHome",
+   "model": "Smartintercom Nelma BlueStreak",
+   "services": [{
+         "name": "Звонок",
+         "type": "Doorbell",
+         "characteristics": [{
+               "type": "ProgrammableSwitchEvent",
+               "link": {
+                  "type": "String",
+                  "topicSearch": "homeassistant/select/(.*)/modes/state",
+                  "topicGet": "homeassistant/binary_sensor/(1)/line_detect/state",
+                  "map": {
+                     "0": "ON"
+                  }
+               },
+               "validValues": "0"
+            },
+            {
+               "type": "Mute",
+               "link": {
+                  "type": "String",
+                  "topicGet": "homeassistant/switch/(1)/mute/state",
+                  "topicSet": "homeassistant/switch/(1)/mute/set",
+                  "map": {
+                     "false": "OFF",
+                     "true": "ON"
+                  }
+               }
+            },
+            {
+               "type": "Brightness",
+               "link": {
+                  "type": "String",
+                  "topicGet": "homeassistant/switch/(1)/led/state",
+                  "topicSet": "homeassistant/switch/(1)/led/set",
+                  "map": {
+                     "0": "OFF",
+                     "100": "ON"
+                  }
+               },
+               "value": 100,
+               "minValue": 0,
+               "maxValue": 100,
+               "minStep": 100
+            }
+         ]
+      },
+      {
+         "name": "Автооткрытие",
+         "type": "Switch",
+         "characteristics": [{
+            "type": "On",
+            "link": {
+               "type": "String",
+               "topicGet": "homeassistant/select/(1)/modes/state",
+               "topicSet": "homeassistant/select/(1)/modes/set",
+               "map": {
+                  "false": "Не активен;Сброс вызова",
+                  "true": "Открывать всегда"
+               }
+            }
+         }]
+      },
+      {
+         "name": "Автосброс",
+         "type": "Switch",
+         "characteristics": [{
+            "type": "On",
+            "link": {
+               "type": "String",
+               "topicGet": "homeassistant/select/(1)/modes/state",
+               "topicSet": "homeassistant/select/(1)/modes/set",
+               "map": {
+                  "false": "Не активен;Открывать всегда",
+                  "true": "Сброс вызова"
+               }
+            }
+         }]
+      },
+      {
+         "name": "Жду курьера",
+         "type": "Switch",
+         "characteristics": [{
+            "type": "On",
+            "link": {
+               "type": "String",
+               "topicGet": "homeassistant/switch/(1)/delivery_call/state",
+               "topicSet": "homeassistant/switch/(1)/delivery_call/set",
+               "map": {
+                  "false": "OFF",
+                  "true": "ON"
+               }
+            }
+         }]
+      },
+      {
+         "name": "Открыть однократно",
+         "type": "Switch",
+         "characteristics": [{
+            "type": "On",
+            "link": {
+               "type": "String",
+               "topicGet": "homeassistant/switch/(1)/accept_call/state",
+               "topicSet": "homeassistant/switch/(1)/accept_call/set",
+               "map": {
+                  "false": "OFF",
+                  "true": "ON"
+               }
+            }
+         }]
+      },
+      {
+         "name": "Отклонить однократно",
+         "type": "Switch",
+         "characteristics": [{
+            "type": "On",
+            "link": {
+               "type": "String",
+               "topicGet": "homeassistant/switch/(1)/reject_call/state",
+               "topicSet": "homeassistant/switch/(1)/reject_call/set",
+               "map": {
+                  "false": "OFF",
+                  "true": "ON"
+               }
+            }
+         }]
+      }
+   ],
+   "options": [{
+         "link": {
+            "type": "String",
+            "topicGet": "homeassistant/switch/(1)/sound/state",
+            "topicSet": "homeassistant/switch/(1)/sound/set",
+            "map": {
+               "false": "OFF",
+               "true": "ON"
+            }
+         },
+         "name": "Воспроизведение аудиосообщений",
+         "description": "Воспроизведение аудиосообщений на блок вызова",
+         "type": "Boolean",
+         "value": true
+      },
+      {
+         "link": {
+            "type": "String",
+            "topicGet": "homeassistant/switch/(1)/phone_disable/state",
+            "topicSet": "homeassistant/switch/(1)/phone_disable/set",
+            "map": {
+               "false": "OFF",
+               "true": "ON"
+            }
+         },
+         "name": "Режим без трубки",
+         "description": "Режим отключения трубки, плата не передает сигнал с линии на трубку",
+         "type": "Boolean",
+         "value": false
+      }
+   ]
+}
