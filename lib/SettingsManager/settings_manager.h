@@ -2,10 +2,13 @@
 #include <string>
 #include <FS.h>
 
+#define DEFAULT_TIME_SERVER "pool.ntp.org"
+
 class SettingsManager {
     public:
         SettingsManager(std::string filename);
         ~SettingsManager();
+        void CheckDefault();
         void LoadSettings(fs::FS aFS);
         void SaveSettings(fs::FS aFS);
         void ResetSettings();
@@ -27,6 +30,7 @@ class SettingsManager {
             uint16_t delay_filter  = 10;
             uint16_t call_end_delay  = 6000;
             const uint16_t delay_before_open_door = 100;
+            std::string time_server = DEFAULT_TIME_SERVER;
             std::string wifi_ssid = "";
             std::string wifi_passwd = "";
             std::string mqtt_server = "";
@@ -35,6 +39,10 @@ class SettingsManager {
             std::string mqtt_passwd = "";
             std::string tlg_token = "";
             std::string tlg_user = "";
+            std::string access_code = "";
+            std::string user_login = "";
+            std::string user_passwd = "";
+            bool web_auth = false;
         } settings;
         std::string getSettings();
         std::string setMode(uint8_t value);
@@ -59,6 +67,10 @@ class SettingsManager {
         std::string setMQTTPassword(std::string value);
         std::string setTLGToken(std::string value);
         std::string setTLGUser(std::string value);
+        std::string setTLGCode(std::string value); 
+        std::string setAuth(bool value);
+        std::string setUserLogin(std::string value);
+        std::string setUserPassword(std::string value);
     private:
         std::string filename;
 };

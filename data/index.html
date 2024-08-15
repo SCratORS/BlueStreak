@@ -251,6 +251,45 @@
             <input id="tlg_user" type="text" class="text right" title="tlg_user" placeholder="Разрешенный ИД" onchange="sendCommand('setTLGUser',this.value)">
           </div>
         </div>
+        <div id="access_code" class = "panel top control no-padding-bottom">
+          <div id="icon" class = "icon icon_barcode"></div>
+          <div class = "text">Код открытия двери</div>
+          <div id="value" class = "text bold right">------</div>
+          <div class = "horizontal-grid right">
+            <button id="delete_code" class="flat_button right" onclick="sendCommand('code','delete');"><div class = "flat_icon icon_trash"></div></button>
+            <button id="generate_code" class="flat_button right" onclick="sendCommand('code','generate');"><div class = "flat_icon icon_renew"></div></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class = "bkg-panel">
+    <div class = "collapse panel top horizontal-grid">
+      <div class = "text caption">Безопасность</div>
+    </div>
+    <div style="display:none;">
+      <div class = "panel top control no-padding-bottom">
+        <div class = "icon icon_account-circle"></div>
+        <div class = "text">Логин</div>
+        <div class="custom-input right">
+          <input id="user_login" type="text" class="text right" title="user_login" placeholder="Логин доступа к WEB" onchange="sendCommand('setUserLogin',this.value)">
+        </div>
+      </div>
+      <div class = "panel top control no-padding-bottom">
+        <div class = "icon icon_form-textbox-password"></div>
+        <div class = "text">Пароль</div>
+        <div class="custom-input right">
+          <input id="user_passwd" type="password" class="text right" title="user_passwd" placeholder="Пароль доступа к WEB" onchange="sendCommand('setUserPassword',this.value)">
+        </div>
+      </div>
+      <div class = "panel top control add-margin">
+          <div class = "icon icon_shield-key"></div>
+          <div class = "text">Авторизация доступа</div>
+          <label class="switch">
+            <input id="web_auth" type="checkbox" title="web_auth" placeholder="" onclick="sendCommand('setAuth',this.checked)">
+            <span class="slider round"></span>
+          </label>
       </div>
     </div>
   </div>

@@ -9,8 +9,8 @@ class TLGManager {
         void setUser(std::string chat_id);
         FastBot * getTLGClient() {return tlg_client;}
         void begin() {tlg_started = true;}
-        void sendMenu(std::string, std::string, std::string, bool);
-        void sendMessage(std::string);
+        void sendMenu(std::string, std::string, std::string, bool, std::string);
+        void sendMessage(std::string, std::string);
         uint8_t last_error = 0;
 
     private:

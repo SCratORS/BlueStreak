@@ -2,7 +2,7 @@
 #include "ArduinoJson.h"
 
 void BinarySensor::publishValue() {
-    client->publish(state_topic.c_str(), (*value)?"ON":"OFF");
+    client->publish(state_topic.c_str(), (*value)?"ON":"OFF", true);
 }
 
 void BinarySensor::mqttDiscovery(DevInfo* dev_info) {

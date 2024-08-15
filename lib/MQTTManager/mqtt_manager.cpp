@@ -60,8 +60,8 @@ void MQTTManager::handle() {
     } else {
         mqtt_client->loop();
         if (millis() - previousMQTTMillis >= 15000) {
+            previousMQTTMillis = millis();
             last_error = 0;
-            
             device_online();
         }
     }

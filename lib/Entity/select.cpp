@@ -2,7 +2,7 @@
 #include "ArduinoJson.h"
 
 void Select::publishValue() {
-    client->publish(state_topic.c_str(), items_list[*value].c_str());
+    client->publish(state_topic.c_str(), items_list[*value].c_str(), true);
 }
 
 Select::~Select(){
