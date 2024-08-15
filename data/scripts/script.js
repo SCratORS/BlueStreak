@@ -158,6 +158,12 @@ function onMessage(event) {
           if (json[key]) element.src=json[key];
           else element.src="";
         }
+        if (element.nodeName.toLowerCase() === 'div') {
+          if (key === 'access_code') {
+            var btn_delete = document.getElementById('delete_code');
+            if (btn_delete) btn_delete.hidden = json[key]=='------';
+          }
+        }
       }
     }
 }
@@ -202,7 +208,7 @@ function progressError(event) {
 
 function uploadMedia(element) {
   const file = element.files[0];
-  if (uploading) alert("Дождитесь окончания предыдущей загрузки.");
+  if (uploading) alert("Дождитесь окончания предыдущей загузки.");
   if (!file) return;
   if (file.size > 4 * BYTES_IN_MB) {
     alert('Очень большой файл.')

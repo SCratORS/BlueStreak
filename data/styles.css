@@ -206,6 +206,15 @@ progress {
 .icon_ftp {
   background-image: url(images/ftp.svg);
 }
+.icon_shield-key {
+  background-image: url(images/shield-key.svg);
+}
+.icon_barcode {
+  background-image: url(images/barcode.svg);
+}
+.icon_renew {
+  background-image: url(images/renew.svg);
+}
 .list-box{
 	width: 100%;
 }
@@ -224,6 +233,10 @@ progress {
 .sub-title {
   font-size: 65%;
   color: var(--color-text-sub-title);
+}
+.bold {
+  font-weight: bold;
+  font-size: 110%;
 }
 .caption {
   font-weight: bold;

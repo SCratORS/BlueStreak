@@ -2,7 +2,7 @@
 #include "ArduinoJson.h"
 
 void Switch::publishValue() {
-    client->publish(state_topic.c_str(), (*value)?"ON":"OFF");
+    client->publish(state_topic.c_str(), (*value)?"ON":"OFF", true);
 }
 
 void Switch::callback(std::string message) {

@@ -2,7 +2,7 @@
 #include "ArduinoJson.h"
 
 void Sensor::publishValue() {
-    client->publish(state_topic.c_str(), (*value).c_str());
+    client->publish(state_topic.c_str(), (*value).c_str(), true);
 }
 
 void Sensor::mqttDiscovery(DevInfo* dev_info) {

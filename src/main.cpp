@@ -1,8 +1,8 @@
 /* TODO
-  - Телеграмм клиент
+  - greeting
 */
 
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.0.0-Web Insider Preview 07.2024 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.0.7-Web Insider Preview 08.2024 Firmware"
 #define COPYRIGHT "SCratORS © 2024"
 #define DISCOVERY_DELAY 500
 #define led_status    16        // Индикатор статуса API, GPIO2 - это встроенный синий светодиод на ESP12
@@ -24,7 +24,6 @@
 #define l_status_close "Закрыто"
 #define STACK_SIZE 32768
 #define CRITICAL_FREE 300000
-#define TIME_SERVER "pool.ntp.org"
 
 #include <ESPAsyncWebserver.h>
 #include <Update.h>
@@ -76,11 +75,10 @@ std::string phone_disable_name = "Отключить трубку";
 std::string accept_call_name = "Открыть дверь";
 std::string reject_call_name = "Сбросить вызов";
 std::string delivery_call_name = "Открыть курьеру";
-
-
-enum {WAIT, CALLING, CALL, SWUP, VOICE, SWOPEN, DROP, ENDING, RESET};
+std::string access_code_name = "Код открытия: ";
+std::string access_code_delete_name = "Удалить код";
+enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, DROP, ENDING, RESET};
 uint8_t currentAction = WAIT;
-bool questSenserProtect = false;
 uint32_t detectMillis = 0;
 uint32_t audioLength = 0;
 
@@ -126,29 +124,29 @@ Select * modes;
 DevInfo * device_info;
 
 hw_timer_t * timer0 = NULL;
-void ICACHE_RAM_ATTR call_detector();
+void ICACHE_RAM_ATTR call_detector_enable();
 
 uint8_t ledIndicatorCounter = 0;
 uint8_t ledStatusCounter = 0;
 uint8_t ledErrorCounter = 0;
 
-void send_tlg_actions_kb(){
+void send_tlg_actions_kb(std::string chat_id){
   // Отправляем клавиатуру выбора действия
   std::string welcome = "Входящий вызов в домофон!\n";
-  std::string message = "✅ " + accept_call_name + "\t" + "🚚 " + mode_name[1] + "\t" + "🚷 " + mode_name[2];
+  std::string message = "✅ " + accept_call_name + "\t" + "🚚 " + delivery_call_name + "\t" + "🚷 " + reject_call_name;
   std::string commands =  "accept_once, delivery_once, reject_once";
-  tlg_manager->sendMenu(welcome, message, commands, false);
+  tlg_manager->sendMenu(welcome, message, commands, false, chat_id);
 }
 
-void send_tlg_mode_kb(bool edit) {
+void send_tlg_mode_kb(bool edit, std::string chat_id) {
   // Отправляем клавиатуру выбора режима
   std::string welcome = "Выбор постоянного режима работы:\n";
   std::string message = mode_name[0] + "\n" + mode_name[1] + "\n" + mode_name[2];
   std::string commands =  "mode_0, mode_1, mode_2";
-  tlg_manager->sendMenu(welcome, message, commands, edit);
+  tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
 }
 
-void send_tlg_start_kb(bool edit) {
+void send_tlg_start_kb(bool edit, std::string chat_id) {
   // Отправляем клавиатуру стартового меню
   std::string welcome = "SmartIntercom - Домофон:\n";
   std::string message = modes_name+": "+mode_name[settings_manager->settings.modes]+"\n" +
@@ -158,9 +156,11 @@ void send_tlg_start_kb(bool edit) {
   (settings_manager->settings.mute?"🟢":"⚫️") + " " + mute_name + "\t" + 
   (settings_manager->settings.sound?"🟢":"⚫️") + " " + sound_name + "\n" + 
   (settings_manager->settings.led?"🟢":"⚫️") + " " + led_name + "\t" + 
-  (settings_manager->settings.phone_disable?"🟢":"⚫️") + " " + phone_disable_name;
-  std::string commands = "modes, accept, delivery, reject, mute, sound, led, phone_disable";
-  tlg_manager->sendMenu(welcome, message, commands, edit);
+  (settings_manager->settings.phone_disable?"🟢":"⚫️") + " " + phone_disable_name + "\n" +
+  (access_code_name) + " " + (settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code) + "\t" +
+  (access_code_delete_name);
+  std::string commands = "modes, accept, delivery, reject, mute, sound, led, phone_disable, generate_code, delete_code";
+  tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
 }
 
 void mqtt_publish_once_actions(){
@@ -198,7 +198,18 @@ void setLineDetect(bool value){
   serializeJson(json, message);
   ESP_LOGI (TAG, "%s", message.c_str());
   if (line_detect) line_detect->publishValue();
-  if (tlg_manager) send_tlg_actions_kb();
+  if (tlg_manager) {
+    if (settings_manager->settings.delivery) tlg_manager->sendMessage("🚚 Входящий вызов в домофон!\nОткрываю дверь один раз.", settings_manager->settings.tlg_user);
+    else if (settings_manager->settings.accept_call) tlg_manager->sendMessage("✅ Входящий вызов в домофон!\nОткрываю дверь один раз.", settings_manager->settings.tlg_user);
+    else if (settings_manager->settings.reject_call) tlg_manager->sendMessage("🚷 Входящий вызов в домофон!\nСбрасываю вызов.", settings_manager->settings.tlg_user);
+    else {
+      switch (settings_manager->settings.modes) {
+        case 0: send_tlg_actions_kb(settings_manager->settings.tlg_user); break;
+        case 1: tlg_manager->sendMessage("🚷 Входящий вызов в домофон!\nСбрасываю вызов.", settings_manager->settings.tlg_user); break;
+        case 2: tlg_manager->sendMessage("✅ Входящий вызов в домофон!\nОткрываю дверь.", settings_manager->settings.tlg_user); break;
+      }
+    }
+  }
   ws.textAll(message.c_str());
 }
 
@@ -337,17 +348,17 @@ void IRAM_ATTR TimerHandler0() {
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
-void call_detector() {
+uint64_t reset_time = 0;
+void call_detector_enable() {
+  reset_time = millis();
   if (currentAction == WAIT) {
     if (settings_manager->settings.mute) {
       digitalWrite(switch_phone, 1);  
       digitalWrite(relay_line, 1);
     }
     detectMillis = millis();
-    questSenserProtect = false;
     currentAction = CALLING;
   }
-  if (currentAction == CALLING) detectMillis = millis();
 }
 
 void phone_disable_action () {
@@ -357,11 +368,12 @@ void phone_disable_action () {
     }
 }
 
+uint64_t timerAction = 0;
 void doAction(uint32_t timer) {
   switch (currentAction) {
     case WAIT:  break;
-    case CALLING: if (timer > settings_manager->settings.call_end_delay) currentAction = RESET;
-                  if (timer > settings_manager->settings.delay_filter && digitalRead(detect_line)) {
+    case CALLING: if (millis() - reset_time > settings_manager->settings.call_end_delay) currentAction = RESET;
+                  if (timer > settings_manager->settings.delay_filter && !digitalRead(detect_line)) {
                     if (!device_status.line_detect) {
                       setLineDetect(true);
                       setLineStatus(l_status_call);
@@ -371,18 +383,19 @@ void doAction(uint32_t timer) {
                         settings_manager->settings.reject_call ||
                         settings_manager->settings.modes ) {
                           currentAction = CALL;
-                          detectMillis = millis();        
+                          detectMillis = millis(); 
+                          timerAction += settings_manager->settings.delay_before;       
                         }    
                   }
                   break;
-    case CALL:  if (timer > settings_manager->settings.delay_before) {
+    case CALL:  if (timer > timerAction) {
                   digitalWrite(switch_phone, 0);  
                   digitalWrite(relay_line, 1);
                   setLineStatus(l_status_answer);
+                  timerAction += settings_manager->settings.delay_before;
                   currentAction = SWUP;
                 } break;
-    case SWUP:  if (timer > settings_manager->settings.delay_before + 
-                            settings_manager->settings.delay_before) {
+    case SWUP:  if (timer > timerAction) {
                   if (settings_manager->settings.sound || settings_manager->settings.delivery) {
                       audioFile = new aAudioFileSource(settings_manager->settings.delivery ? DELIVERY_FILENAME : 
                                                             settings_manager->settings.accept_call ? ACCEPT_FILENAME :
@@ -399,7 +412,8 @@ void doAction(uint32_t timer) {
                   audioLength = 0;
                   currentAction = ( settings_manager->settings.delivery || 
                                     settings_manager->settings.accept_call || 
-                                    (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? SWOPEN : DROP;
+                                    (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? PREOPEN : DROP;
+                  if (currentAction == PREOPEN) timerAction += settings_manager->settings.delay_before;
                 } break;
     case VOICE: if (!audioPlayer->loop()) {
                   audioPlayer->stop();
@@ -410,24 +424,21 @@ void doAction(uint32_t timer) {
                                     settings_manager->settings.accept_call || 
                                     (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? SWOPEN : DROP;
                 } break;
+    case PREOPEN: if (timer > timerAction) currentAction = SWOPEN;
+                  break;
     case SWOPEN:digitalWrite(switch_open, 1);
                 setLineStatus(l_status_open); 
                 currentAction = DROP;
+                timerAction += (audioLength + settings_manager->settings.delay_open);
                 break;
-    case DROP:  if (timer > settings_manager->settings.delay_before + 
-                            settings_manager->settings.delay_before + 
-                            audioLength + 
-                            settings_manager->settings.delay_open) {
+    case DROP:  if (timer > timerAction) {
                   digitalWrite(switch_open, 0);
                   digitalWrite(switch_phone, 1); 
                   setLineStatus(l_status_reject);
                   currentAction = ENDING;
+                  timerAction += settings_manager->settings.delay_after;
                 } break;
-    case ENDING:if (timer > settings_manager->settings.delay_before + 
-                            settings_manager->settings.delay_before + 
-                            audioLength + 
-                            settings_manager->settings.delay_open + 
-                            settings_manager->settings.delay_after) {
+    case ENDING:if (timer > timerAction) {
                   currentAction = RESET;
                 } break;
     case RESET: digitalWrite(relay_line, settings_manager->settings.phone_disable);
@@ -440,6 +451,7 @@ void doAction(uint32_t timer) {
                 device_status.line_status = l_status_close;
                 sendStatus();
                 currentAction = WAIT;
+                timerAction = 0;
                 break;
   }
 }
@@ -506,16 +518,51 @@ void setSound(bool value) {
   if (sound) sound->publishValue();
 }
 
+void tlg_code_generate(){
+    std::string code = "";
+    for (uint8_t i = 0; i<6; i++)
+    code = code + std::to_string(random(10));
+    ws.textAll(settings_manager->setTLGCode(code).c_str());
+    settings_manager->SaveSettings(aFS);
+}
+void tlg_code_delete(){
+    ws.textAll(settings_manager->setTLGCode("").c_str());
+    settings_manager->SaveSettings(aFS);
+}
+
 void tlg_callback(FB_msg& msg) {
   std::string cmd = msg.data.c_str();
   std::string txt = msg.text.c_str();
-  ESP_LOGI(TAG,"Callback: cmd:%s txt:%s", cmd.c_str(), txt.c_str());
-  if (txt == "/start") send_tlg_start_kb(false);
+  std::string chat_id = msg.chatID.c_str();
+  ESP_LOGI(TAG,"Callback: chat: %s cmd:%s txt:%s", chat_id.c_str(), cmd.c_str(), txt.c_str());
+  
+  if (settings_manager->settings.tlg_user.find(chat_id) == std::string::npos) {
+    //public message
+    if (txt == "/start") tlg_manager->sendMessage("🏠 Введите код доступа.", chat_id);
+    else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == txt) {
+      setAccept(true);
+      tlg_manager->sendMessage("✅ Доступ разрешён. Дверь будет открыта.", chat_id);
+      tlg_manager->sendMessage("⚠️ Разрешён доступ по коду.", settings_manager->settings.tlg_user);
+    } else {
+      tlg_manager->sendMessage("⛔️ Доступ запрещён.", chat_id);
+      if (settings_manager->settings.access_code == "") tlg_manager->sendMessage("❗️Попытка ввода кода или сообщение. ID пользователя: " + chat_id + " Текст: "+ txt, settings_manager->settings.tlg_user);
+    }
+    return;
+  } 
+
+  if (txt == "/start") send_tlg_start_kb(false, chat_id);
   else if (cmd == "") return;
-  else if (cmd == "modes") send_tlg_mode_kb(true);
-  else if (cmd == "accept_once") {setAccept(true); tlg_manager->sendMessage("Открываю дверь.");}
-  else if (cmd == "delivery_once") {setDelivery(true); tlg_manager->sendMessage("Открываю дверь курьеру.");}
-  else if (cmd == "reject_once") {setReject(true); tlg_manager->sendMessage("Сбрасываю вызов.");}
+  else if (cmd == "modes") send_tlg_mode_kb(true, chat_id);
+  else if (cmd == "accept_once") {setAccept(true); tlg_manager->sendMessage("Открываю дверь.", chat_id);}
+  else if (cmd == "delivery_once") {setDelivery(true); tlg_manager->sendMessage("Открываю дверь курьеру.", chat_id);}
+  else if (cmd == "reject_once") {setReject(true); tlg_manager->sendMessage("Сбрасываю вызов.", chat_id);}
+  else if (cmd == "generate_code") {
+    tlg_code_generate();
+    send_tlg_start_kb(true, chat_id);
+    tlg_manager->getTLGClient()->setTextMode(FB_MARKDOWN);
+    tlg_manager->sendMessage("`" + settings_manager->settings.access_code + "`", chat_id);
+    tlg_manager->getTLGClient()->setTextMode(FB_TEXT);
+  }
   else {
     if (cmd == "mode_0") setMode(0);
     if (cmd == "mode_1") setMode(1);
@@ -527,7 +574,8 @@ void tlg_callback(FB_msg& msg) {
     if (cmd == "sound") setMute(!settings_manager->settings.sound);
     if (cmd == "led") setLed(!settings_manager->settings.led);
     if (cmd == "phone_disable") setPhoneDisable(!settings_manager->settings.phone_disable);
-    send_tlg_start_kb(true);
+    if (cmd == "delete_code") tlg_code_delete();
+    send_tlg_start_kb(true, chat_id);
   }
 }
 
@@ -593,7 +641,7 @@ void enable_tlg(bool value){
   if (value) {
     if (tlg_manager) return;
     tlg_manager = new TLGManager(settings_manager->settings.tlg_token);
-    tlg_manager->setUser(settings_manager->settings.tlg_user);
+//  tlg_manager->setUser(settings_manager->settings.tlg_user); //Это не надо. Будем фильтровать руками
     tlg_manager->getTLGClient()->attach(tlg_callback);
     tlg_manager->begin();
   } else {
@@ -612,6 +660,7 @@ void enable_mqtt(bool value) {
                                                       settings_manager->settings.mqtt_login,
                                                       settings_manager->settings.mqtt_passwd);
     mqtt_manager->device_info = device_info;
+    mqtt_manager->setClientID(device_info->mqtt_entity_id);
     mqtt_manager->getMQTTClient()->setCallback(mqtt_callback);
     entity_configuration(mqtt_manager->getMQTTClient());
     mqtt_manager->begin();
@@ -693,7 +742,21 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setMQTTPassword") { ws.textAll(settings_manager->setMQTTPassword(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setTLGToken") { ws.textAll(settings_manager->setTLGToken(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setTLGUser") { ws.textAll(settings_manager->setTLGUser(doc["value"].as<std::string>()).c_str()); return; }
+    if (doc["method"] == "code") {
+      std::string value = doc["value"].as<std::string>();
+      if (value == "generate") tlg_code_generate();
+      if (value == "delete") tlg_code_delete();
+      return;
+    }
     if (doc["method"] == "enableFTP") { ws.textAll(enable_ftp_server(doc["value"].as<bool>()).c_str()); return; }
+    if (doc["method"] == "setUserLogin") { ws.textAll(settings_manager->setUserLogin(doc["value"].as<std::string>()).c_str()); return; }
+    if (doc["method"] == "setUserPassword") { ws.textAll(settings_manager->setUserPassword(doc["value"].as<std::string>()).c_str()); return; }
+    if (doc["method"] == "setAuth") { 
+      ws.textAll(settings_manager->setAuth(doc["value"].as<bool>()).c_str());
+      settings_manager->SaveSettings(aFS);
+      sendAlert("Перезагрузите устройство.");
+      return; 
+    }
     if (doc["method"] == "save_params") { save_settings(); sendAlert("Настройки сохранены"); return; }
     if (doc["method"] == "restart") { 
       sendAlert("Устройство перезагружается");
@@ -730,7 +793,67 @@ void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uin
   }
 }
 
-void onREST(AsyncWebServerRequest *request) {}
+void onREST(AsyncWebServerRequest *request) {
+  JsonDocument json;
+  uint8_t params = request->params();
+  for(uint8_t i=0;i<params;i++){
+    AsyncWebParameter* p = request->getParam(i);
+    if(p->isFile()){
+      request->send(404);
+    } else {
+      if (p->name() == "ftp") {
+        ws.textAll(enable_ftp_server(p->value() == "true").c_str());
+        json["ftp"] = settings_manager->settings.ftp;
+        continue;
+      }
+      if (p->name() == "reset") {
+        factory_reset();
+        json["reset"] = "ok";
+        continue;
+      }
+      if (p->name() == "accept") {
+        setAccept(p->value() == "true");
+        json["accept_call"] = settings_manager->settings.accept_call;
+        json["delivery"] = settings_manager->settings.delivery;
+        json["reject_call"] = settings_manager->settings.reject_call;
+        continue;
+      }
+      if (p->name() == "reject") {
+        setReject(p->value() == "true");
+        json["accept_call"] = settings_manager->settings.accept_call;
+        json["delivery"] = settings_manager->settings.delivery;
+        json["reject_call"] = settings_manager->settings.reject_call;
+        continue;
+      }
+      if (p->name() == "delivery") {
+        setDelivery(p->value() == "true");
+        json["accept_call"] = settings_manager->settings.accept_call;
+        json["delivery"] = settings_manager->settings.delivery;
+        json["reject_call"] = settings_manager->settings.reject_call;
+        continue;
+      }
+      if (p->name() == "mode") {
+        setMode(atoi(p->value().c_str()));
+        json["modes"] = settings_manager->settings.modes;
+        continue;
+      }
+      if (p->name() == "restart" || p->name() == "reboot") {
+        json["restart"] = "ok";
+        std::string message;
+        serializeJson(json, message);
+        request->send(200, "text/html", message.c_str());
+        sendAlert("Устройство перезагружается");
+        ESP.restart();
+        continue;
+      }
+      json[p->name().c_str()] = "method undefined";
+      continue;
+    }
+  }
+  std::string message;
+  serializeJson(json, message);
+  request->send(200, "text/html", message.c_str());
+}
 
 void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   switch (type) {
@@ -746,11 +869,10 @@ bool shouldReboot = false;
 
 void web_server_init() {
   enable_ftp_server(!aFS.exists(INDEX_FILENAME));
-  server.on("/api", HTTP_POST, onREST);
+  server.on("/api", HTTP_ANY, onREST);
   server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
     request->send(200);
-  }, onUpload);
-  
+  }, onUpload); 
   server.on("/update", HTTP_POST, [](AsyncWebServerRequest *request){
     shouldReboot = !Update.hasError();
     AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", shouldReboot?"OK":"FAIL");
@@ -784,17 +906,20 @@ void web_server_init() {
       }
     }
   });
-
-  server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request){
-    factory_reset();
-    request->send(200, "text/html", "Factory reset complete. Restart.");
-    ESP.restart();
-  });
   server.on(SETTING_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(501, "text/html", "Access denied!");
   });
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){request->send(aFS, "/index.html", "text/html");});
-  server.serveStatic("/", aFS, "/");
+  if (settings_manager->settings.web_auth) {
+    server.serveStatic("/", aFS, "/")
+          .setCacheControl("max-age=60000")
+          .setDefaultFile("index.html")
+          .setAuthentication(settings_manager->settings.user_login.c_str(), settings_manager->settings.user_passwd.c_str());
+          
+  } else {
+    server.serveStatic("/", aFS, "/")
+      .setCacheControl("max-age=60000")
+      .setDefaultFile("index.html");
+  }
   server.onNotFound(onRequest);
   server.onFileUpload(onUpload);
   server.onRequestBody(onBody);
@@ -806,8 +931,8 @@ void web_server_init() {
 
 TaskHandle_t timeConfigTask;
 void time_configure( void * pvParameters ) {   
-    ESP_LOGI(TAG, "Configurate time. Connect to: %s", TIME_SERVER);
-    configTime(0, 0, TIME_SERVER);
+    ESP_LOGI(TAG, "Configurate time. Connect to: %s", settings_manager->settings.time_server.c_str());
+    configTime(0, 0, settings_manager->settings.time_server.c_str());
     time_t now = time(nullptr);
     while (now < 24 * 3600) {
       vTaskDelay(pdMS_TO_TICKS(100));
@@ -841,7 +966,7 @@ void setup() {
   pinMode(relay_line, OUTPUT);
   pinMode(switch_open, OUTPUT);
   pinMode(switch_phone, OUTPUT); 
-  attachInterrupt(detect_line, call_detector, FALLING);
+  attachInterrupt(detect_line, call_detector_enable, FALLING);
   audioOut->SetOutputModeMono(true);
   timer0 = timerBegin(0, 80, true); // 12,5 ns * 80 = 1000ns = 1us
   timerAttachInterrupt(timer0, &TimerHandler0, false); //edge interrupts do not work, use false

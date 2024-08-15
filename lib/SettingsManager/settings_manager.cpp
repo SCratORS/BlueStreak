@@ -1,11 +1,27 @@
 #include "settings_manager.h"
 #include <ArduinoJson.h>
 
+
 static const char* TAG = "SETTING";
 
 SettingsManager::SettingsManager(std::string filename) {
     this->filename = filename;
     last_error= 0;
+}
+
+void SettingsManager::CheckDefault() {
+    if (settings.time_server == "" || settings.time_server == "null" ) settings.time_server = DEFAULT_TIME_SERVER;
+    if (settings.wifi_ssid == "null") settings.wifi_ssid = "";
+    if (settings.wifi_passwd == "null") settings.wifi_passwd = "";
+    if (settings.mqtt_server == "null") settings.mqtt_server = "";
+    if (settings.mqtt_login == "null") settings.mqtt_login = "";
+    if (settings.mqtt_passwd == "null") settings.mqtt_passwd = "";
+    if (settings.tlg_token == "null") settings.tlg_token = "";
+    if (settings.tlg_user == "null") settings.tlg_user = "";
+    if (settings.time_server == "null") settings.time_server = "";
+    if (settings.access_code == "null") settings.access_code = "";
+    if (settings.user_login == "null") settings.user_login = "";
+    if (settings.user_passwd == "null") settings.user_passwd = "";
 }
 
 void SettingsManager::LoadSettings(fs::FS aFS) {
@@ -40,6 +56,12 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.mqtt_passwd = json["mqtt_passwd"].as<std::string>();
         settings.tlg_token = json["tlg_token"].as<std::string>();
         settings.tlg_user = json["tlg_user"].as<std::string>();
+        settings.time_server = json["time_server"].as<std::string>();
+        settings.access_code = json["access_code"].as<std::string>();
+        settings.user_login = json["user_login"].as<std::string>();
+        settings.user_passwd = json["user_passwd"].as<std::string>();
+        settings.web_auth = json["web_auth"].as<bool>();
+        CheckDefault();
         last_error = 0;
     }
     file.close();
@@ -52,31 +74,36 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
     last_error = 4;
     ESP_LOGE(TAG, "Can't save settings");
   } else {
-      JsonDocument json;
-      json["accept_call"] = settings.accept_call;
-      json["delivery"] = settings.delivery;
-      json["reject_call"] = settings.reject_call;
-      json["led"] = settings.led;
-      json["sound"] = settings.sound;
-      json["mute"] = settings.mute;
-      json["phone_disable"] = settings.phone_disable;
-      json["modes"] = settings.modes;
-      json["server_type"] = settings.server_type;
-      json["delay_before"] = settings.delay_before;
-      json["delay_open"] = settings.delay_open;
-      json["delay_after"] = settings.delay_after;
-      json["delay_filter"] = settings.delay_filter;
-      json["call_end_delay"] = settings.call_end_delay;
-      json["mqtt_port"] = settings.mqtt_port;
-      json["ssid"] = settings.wifi_ssid;
-      json["wifi_passwd"] = settings.wifi_passwd;
-      json["mqtt_server"] = settings.mqtt_server;
-      json["mqtt_login"] = settings.mqtt_login;
-      json["mqtt_passwd"] = settings.mqtt_passwd;
-      json["tlg_token"] = settings.tlg_token;
-      json["tlg_user"] = settings.tlg_user;
-      serializeJson(json, file);
-      last_error = 0;
+        JsonDocument json;
+        json["accept_call"] = settings.accept_call;
+        json["delivery"] = settings.delivery;
+        json["reject_call"] = settings.reject_call;
+        json["led"] = settings.led;
+        json["sound"] = settings.sound;
+        json["mute"] = settings.mute;
+        json["phone_disable"] = settings.phone_disable;
+        json["modes"] = settings.modes;
+        json["server_type"] = settings.server_type;
+        json["delay_before"] = settings.delay_before;
+        json["delay_open"] = settings.delay_open;
+        json["delay_after"] = settings.delay_after;
+        json["delay_filter"] = settings.delay_filter;
+        json["call_end_delay"] = settings.call_end_delay;
+        json["mqtt_port"] = settings.mqtt_port;
+        json["ssid"] = settings.wifi_ssid;
+        json["wifi_passwd"] = settings.wifi_passwd;
+        json["mqtt_server"] = settings.mqtt_server;
+        json["mqtt_login"] = settings.mqtt_login;
+        json["mqtt_passwd"] = settings.mqtt_passwd;
+        json["tlg_token"] = settings.tlg_token;
+        json["tlg_user"] = settings.tlg_user;
+        json["time_server"] = settings.time_server;
+        json["access_code"] = settings.access_code;
+        json["user_login"] = settings.user_login;
+        json["user_passwd"] = settings.user_passwd;
+        json["web_auth"] = settings.web_auth;
+        serializeJson(json, file);
+        last_error = 0;
   }
   file.close();
   ESP_LOGI(TAG, "Settings saved!");
@@ -106,6 +133,11 @@ void SettingsManager::ResetSettings() {
     settings.mqtt_passwd = "";
     settings.tlg_token = "";
     settings.tlg_user = "";
+    settings.time_server = DEFAULT_TIME_SERVER;
+    settings.access_code = "";
+    settings.user_login = "";
+    settings.user_passwd = "";
+    settings.web_auth = false;
     last_error = 0;
 }
 
@@ -133,6 +165,10 @@ std::string SettingsManager::getSettings(){
     json["mqtt_passwd"] = settings.mqtt_passwd;
     json["tlg_token"] = settings.tlg_token;
     json["tlg_user"] = settings.tlg_user;
+    json["access_code"] = settings.access_code==""?"------":settings.access_code;
+    json["user_login"] = settings.user_login;
+    json["user_passwd"] = settings.user_passwd;
+    json["web_auth"] = settings.web_auth;
     std::string message;
     serializeJson(json, message);
     ESP_LOGD (TAG, "%s", message.c_str());
@@ -370,6 +406,46 @@ std::string SettingsManager::setTLGUser(std::string value) {
     settings.tlg_user = value;
     JsonDocument json;
     json["tlg_user"] = settings.tlg_user;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setUserLogin(std::string value) {
+    settings.user_login = value;
+    JsonDocument json;
+    json["user_login"] = settings.user_login;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setUserPassword(std::string value) {
+    settings.user_passwd = value;
+    JsonDocument json;
+    json["user_passwd"] = settings.user_passwd;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setTLGCode(std::string value) {
+    settings.access_code = value;
+    JsonDocument json;
+    json["access_code"] = settings.access_code==""?"------":settings.access_code;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setAuth(bool value) {
+    settings.web_auth = value;
+    JsonDocument json;
+    json["web_auth"] = settings.web_auth;
     std::string message;
     serializeJson(json, message);
     ESP_LOGD (TAG, "%s", message.c_str());
