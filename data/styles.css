@@ -215,6 +215,15 @@ progress {
 .icon_renew {
   background-image: url(images/renew.svg);
 }
+.icon_retain {
+  background-image: url(images/retain.svg);
+}
+.icon_child-lock {
+  background-image: url(images/child-lock.svg);
+}
+.icon_timer-sand {
+  background-image: url(images/timer-sand.svg);
+}
 .list-box{
 	width: 100%;
 }
