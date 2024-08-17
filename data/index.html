@@ -234,6 +234,14 @@
             <input id="mqtt_passwd" type="password" class="text right" title="mqtt_passwd" placeholder="Пароль" onchange="sendCommand('setMQTTPassword',this.value)">
           </div>
         </div>
+        <div class = "panel top control add-margin no-padding-bottom">
+        <div class = "icon icon_retain"></div>
+        <div class = "text">Удержание сообщений</div>
+        <label class="switch">
+          <input id="mqtt_retain" type="checkbox" title="mqtt_retain" placeholder="" onclick="sendCommand('setRetain',this.checked)">
+          <span class="slider round"></span>
+        </label>
+      </div>
       </div>
       <div id="tlg_settings" hidden>
         <div class = "panel text sub-title" style="padding-top: var(--3wp);">Конфигурация Telegram-клиента</div>
@@ -260,6 +268,14 @@
             <button id="generate_code" class="flat_button right" onclick="sendCommand('code','generate');"><div class = "flat_icon icon_renew"></div></button>
           </div>
         </div>
+        <div class = "panel top control no-padding-bottom">
+          <div class = "icon icon_timer-sand"></div>
+          <div class="text">Время действия кода</div>
+          <div class="custom-input right" style="width: 30%;">
+            <input id="access_code_lifetime" type="number" class="text right" title="access_code_lifetime" placeholder="" onchange="sendCommand('setCodeLifeTime',this.value)">
+            <div class="text right">мин.</div>   
+          </div>
+        </div>      
       </div>
     </div>
   </div>
@@ -288,6 +304,14 @@
           <div class = "text">Авторизация доступа</div>
           <label class="switch">
             <input id="web_auth" type="checkbox" title="web_auth" placeholder="" onclick="sendCommand('setAuth',this.checked)">
+            <span class="slider round"></span>
+          </label>
+      </div>
+      <div class = "panel top control add-margin no-padding-bottom">
+          <div class = "icon icon_child-lock"></div>
+          <div class = "text">Блокировка от детей</div>
+          <label class="switch">
+            <input id="child_lock" type="checkbox" title="child_lock" placeholder="" onclick="sendCommand('setChildLock',this.checked)">
             <span class="slider round"></span>
           </label>
       </div>

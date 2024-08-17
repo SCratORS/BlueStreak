@@ -13,6 +13,7 @@ class SettingsManager {
         void SaveSettings(fs::FS aFS);
         void ResetSettings();
         uint8_t last_error = 0;
+        uint64_t access_code_expires = 0;
         struct {
             bool accept_call = false;
             bool delivery = false;
@@ -43,6 +44,9 @@ class SettingsManager {
             std::string user_login = "";
             std::string user_passwd = "";
             bool web_auth = false;
+            bool child_lock = false;
+            bool mqtt_retain = true;
+            uint16_t access_code_lifetime = 0;
         } settings;
         std::string getSettings();
         std::string setMode(uint8_t value);
@@ -54,9 +58,11 @@ class SettingsManager {
         std::string setDelayAfterClose(uint16_t value);
         std::string setCallEndDelay(uint16_t value);
         std::string setDelayFilter(uint16_t value);
+        std::string setCodeLifeTime(uint16_t value);
         std::string setLed(bool value);
         std::string setSound(bool value);
         std::string setMute(bool value);
+        std::string setRetain(bool value);
         std::string setPhoneDisable(bool value);
         std::string setSSID(std::string value);
         std::string setWIFIPassword(std::string value);
@@ -69,8 +75,10 @@ class SettingsManager {
         std::string setTLGUser(std::string value);
         std::string setTLGCode(std::string value); 
         std::string setAuth(bool value);
+        std::string setChildLock(bool value);
         std::string setUserLogin(std::string value);
         std::string setUserPassword(std::string value);
+
     private:
         std::string filename;
 };

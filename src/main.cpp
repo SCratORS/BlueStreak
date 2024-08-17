@@ -2,7 +2,7 @@
   - greeting
 */
 
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.0.7-Web Insider Preview 08.2024 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.0.9-Web Insider Preview 08.2024 Firmware"
 #define COPYRIGHT "SCratORS © 2024"
 #define DISCOVERY_DELAY 500
 #define led_status    16        // Индикатор статуса API, GPIO2 - это встроенный синий светодиод на ESP12
@@ -34,6 +34,7 @@
 #include "settings_manager.h"
 #include "mqtt_manager.h"
 #include "tlg_manager.h"
+#include "esp_random.h"
 
 #include "entity.h"
 #include "switch.h"
@@ -520,13 +521,16 @@ void setSound(bool value) {
 
 void tlg_code_generate(){
     std::string code = "";
+    esp_random();
     for (uint8_t i = 0; i<6; i++)
-    code = code + std::to_string(random(10));
+    code = code + std::to_string(esp_random())[0];
     ws.textAll(settings_manager->setTLGCode(code).c_str());
+    settings_manager->access_code_expires = 0;
     settings_manager->SaveSettings(aFS);
 }
 void tlg_code_delete(){
     ws.textAll(settings_manager->setTLGCode("").c_str());
+    settings_manager->access_code_expires = 0;
     settings_manager->SaveSettings(aFS);
 }
 
@@ -536,10 +540,15 @@ void tlg_callback(FB_msg& msg) {
   std::string chat_id = msg.chatID.c_str();
   ESP_LOGI(TAG,"Callback: chat: %s cmd:%s txt:%s", chat_id.c_str(), cmd.c_str(), txt.c_str());
   
+  //public message  
   if (settings_manager->settings.tlg_user.find(chat_id) == std::string::npos) {
-    //public message
     if (txt == "/start") tlg_manager->sendMessage("🏠 Введите код доступа.", chat_id);
     else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == txt) {
+      if (settings_manager->settings.access_code_lifetime && !settings_manager->access_code_expires) {
+        settings_manager->access_code_expires = millis()+(settings_manager->settings.access_code_lifetime * 60000);
+        std::string lifetime = std::to_string(settings_manager->settings.access_code_lifetime);
+        tlg_manager->sendMessage("⚠️ Код успешно активирован. Срок действия кода: " + lifetime + " мин.", chat_id);
+      }
       setAccept(true);
       tlg_manager->sendMessage("✅ Доступ разрешён. Дверь будет открыта.", chat_id);
       tlg_manager->sendMessage("⚠️ Разрешён доступ по коду.", settings_manager->settings.tlg_user);
@@ -550,7 +559,17 @@ void tlg_callback(FB_msg& msg) {
     return;
   } 
 
+  //private message 
   if (txt == "/start") send_tlg_start_kb(false, chat_id);
+  else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == txt) {
+    if (!settings_manager->access_code_expires) {
+      if (settings_manager->settings.access_code_lifetime) tlg_manager->sendMessage("🔐 Код не активирован.", chat_id);
+      else tlg_manager->sendMessage("🔐 Код активен без срока действия.", chat_id);
+    } else {
+      std::string lifetime = std::to_string((settings_manager->access_code_expires - millis()) / 60000);
+      tlg_manager->sendMessage("🕓 До окончания срока действия кода осталось: " + lifetime + " мин.", chat_id);
+    }
+  }
   else if (cmd == "") return;
   else if (cmd == "modes") send_tlg_mode_kb(true, chat_id);
   else if (cmd == "accept_once") {setAccept(true); tlg_manager->sendMessage("Открываю дверь.", chat_id);}
@@ -597,16 +616,16 @@ void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
 }
 
 void entity_configuration(PubSubClient * mqtt_client) {
-  accept_once = new Switch("accept_call", mqtt_client, &settings_manager->settings.accept_call);
-  reject_once = new Switch("reject_call", mqtt_client, &settings_manager->settings.reject_call);
-  delivery_once = new Switch("delivery_call", mqtt_client, &settings_manager->settings.delivery);
-  sound = new Switch("sound", mqtt_client, &settings_manager->settings.sound);
-  led = new Switch("led", mqtt_client, &settings_manager->settings.led);
-  mute = new Switch("mute", mqtt_client, &settings_manager->settings.mute);
-  phone_disable = new Switch("phone_disable", mqtt_client, &settings_manager->settings.phone_disable);
-  line_detect = new BinarySensor("line_detect", mqtt_client, &device_status.line_detect);
-  line_status = new Sensor("line_status", mqtt_client, &device_status.line_status);
-  modes = new Select("modes", mqtt_client, &settings_manager->settings.modes);
+  accept_once = new Switch("accept_call", mqtt_client, &settings_manager->settings.accept_call, &settings_manager->settings.mqtt_retain);
+  reject_once = new Switch("reject_call", mqtt_client, &settings_manager->settings.reject_call, &settings_manager->settings.mqtt_retain);
+  delivery_once = new Switch("delivery_call", mqtt_client, &settings_manager->settings.delivery, &settings_manager->settings.mqtt_retain);
+  sound = new Switch("sound", mqtt_client, &settings_manager->settings.sound, &settings_manager->settings.mqtt_retain);
+  led = new Switch("led", mqtt_client, &settings_manager->settings.led, &settings_manager->settings.mqtt_retain);
+  mute = new Switch("mute", mqtt_client, &settings_manager->settings.mute, &settings_manager->settings.mqtt_retain);
+  phone_disable = new Switch("phone_disable", mqtt_client, &settings_manager->settings.phone_disable, &settings_manager->settings.mqtt_retain);
+  line_detect = new BinarySensor("line_detect", mqtt_client, &device_status.line_detect, &settings_manager->settings.mqtt_retain);
+  line_status = new Sensor("line_status", mqtt_client, &device_status.line_status, &settings_manager->settings.mqtt_retain);
+  modes = new Select("modes", mqtt_client, &settings_manager->settings.modes, &settings_manager->settings.mqtt_retain);
 
   modes->items_list.insert(std::make_pair(0, mode_name[0]));
   modes->items_list.insert(std::make_pair(1, mode_name[1]));
@@ -727,6 +746,8 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setLed")      { setLed(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setMute")     { setMute(doc["value"].as<bool>()); return; }
+    if (doc["method"] == "setRetain")   { ws.textAll(settings_manager->setRetain(doc["value"].as<bool>()).c_str()); return; }
+    if (doc["method"] == "setChildLock"){ ws.textAll(settings_manager->setChildLock(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setPhoneDisable") { setPhoneDisable(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setSSID") { ws.textAll(settings_manager->setSSID(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setWIFIPassword") { ws.textAll(settings_manager->setWIFIPassword(doc["value"].as<std::string>()).c_str()); return; }
@@ -742,6 +763,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setMQTTPassword") { ws.textAll(settings_manager->setMQTTPassword(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setTLGToken") { ws.textAll(settings_manager->setTLGToken(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setTLGUser") { ws.textAll(settings_manager->setTLGUser(doc["value"].as<std::string>()).c_str()); return; }
+    if (doc["method"] == "setCodeLifeTime") { ws.textAll(settings_manager->setCodeLifeTime(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "code") {
       std::string value = doc["value"].as<std::string>();
       if (value == "generate") tlg_code_generate();
@@ -911,13 +933,13 @@ void web_server_init() {
   });
   if (settings_manager->settings.web_auth) {
     server.serveStatic("/", aFS, "/")
-          .setCacheControl("max-age=60000")
+          .setCacheControl("max-age=604800") // 1 неделя;
           .setDefaultFile("index.html")
           .setAuthentication(settings_manager->settings.user_login.c_str(), settings_manager->settings.user_passwd.c_str());
           
   } else {
     server.serveStatic("/", aFS, "/")
-      .setCacheControl("max-age=60000")
+      .setCacheControl("max-age=604800") // 1 неделя;
       .setDefaultFile("index.html");
   }
   server.onNotFound(onRequest);
@@ -949,7 +971,16 @@ void wifi_loop ( void * pvParameters ) {
     while (wifi_manager) { 
       wifi_manager->handle();
       if (settings_manager->settings.server_type == 1 && mqtt_manager) mqtt_manager->handle();
-      if (settings_manager->settings.server_type == 2 && tlg_manager) tlg_manager->handle();
+      if (settings_manager->settings.server_type == 2 && tlg_manager) {
+        tlg_manager->handle();
+        if (  settings_manager->settings.access_code != "" &&
+              settings_manager->settings.access_code_lifetime &&
+              settings_manager->access_code_expires &&
+              settings_manager->access_code_expires <= millis() ) {
+                tlg_code_delete();
+                setAccept(false);
+              }
+      }
       if (settings_manager->settings.ftp && ftp_server) ftp_server->handleFTP();
       vTaskDelay(pdMS_TO_TICKS(10));    
     }
@@ -1030,22 +1061,24 @@ void loop() {
 
   if (currentAction != WAIT) doAction(millis()-detectMillis);
 
-  bool btnState = !digitalRead(button_boot);
-  if (btnState && !btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
-      btnPressFlag = true;
-      last_toggle = millis();
-      if (hw_status.last_error) hw_status.last_error = 0;
-      else if (settings_manager && settings_manager->last_error) settings_manager->last_error = 0;
-      else if (wifi_manager && wifi_manager->last_error) wifi_manager->last_error = 0;
-      else setAccept(!settings_manager->settings.accept_call);
-  }
-  if (btnState && btnPressFlag && millis() - last_toggle > LONGPRESS_DELAY) {
-      last_toggle = millis();
-      factory_reset();
-  }
-  if (!btnState && btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
-      btnPressFlag = false;
-      last_toggle = millis();
+  if (!settings_manager->settings.child_lock) {
+    bool btnState = !digitalRead(button_boot);
+    if (btnState && !btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
+        btnPressFlag = true;
+        last_toggle = millis();
+        if (hw_status.last_error) hw_status.last_error = 0;
+        else if (settings_manager && settings_manager->last_error) settings_manager->last_error = 0;
+        else if (wifi_manager && wifi_manager->last_error) wifi_manager->last_error = 0;
+        else setAccept(!settings_manager->settings.accept_call);
+    }
+    if (btnState && btnPressFlag && millis() - last_toggle > LONGPRESS_DELAY) {
+        last_toggle = millis();
+        factory_reset();
+    }
+    if (!btnState && btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
+        btnPressFlag = false;
+        last_toggle = millis();
+    }
   }
 }
 

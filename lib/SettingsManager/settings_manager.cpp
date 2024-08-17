@@ -10,7 +10,7 @@ SettingsManager::SettingsManager(std::string filename) {
 }
 
 void SettingsManager::CheckDefault() {
-    if (settings.time_server == "" || settings.time_server == "null" ) settings.time_server = DEFAULT_TIME_SERVER;
+    if (settings.time_server == "null" ) settings.time_server = DEFAULT_TIME_SERVER;
     if (settings.wifi_ssid == "null") settings.wifi_ssid = "";
     if (settings.wifi_passwd == "null") settings.wifi_passwd = "";
     if (settings.mqtt_server == "null") settings.mqtt_server = "";
@@ -61,6 +61,9 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.user_login = json["user_login"].as<std::string>();
         settings.user_passwd = json["user_passwd"].as<std::string>();
         settings.web_auth = json["web_auth"].as<bool>();
+        settings.mqtt_retain = json["mqtt_retain"].as<bool>();
+        settings.child_lock = json["child_lock"].as<bool>();
+        settings.access_code_lifetime = json["access_code_lifetime"].as<uint16_t>();
         CheckDefault();
         last_error = 0;
     }
@@ -102,6 +105,9 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["user_login"] = settings.user_login;
         json["user_passwd"] = settings.user_passwd;
         json["web_auth"] = settings.web_auth;
+        json["mqtt_retain"] = settings.mqtt_retain;
+        json["child_lock"] = settings.child_lock;
+        json["access_code_lifetime"] = settings.access_code_lifetime;
         serializeJson(json, file);
         last_error = 0;
   }
@@ -138,6 +144,9 @@ void SettingsManager::ResetSettings() {
     settings.user_login = "";
     settings.user_passwd = "";
     settings.web_auth = false;
+    settings.child_lock = false;
+    settings.mqtt_retain = true;
+    settings.access_code_lifetime = 0;
     last_error = 0;
 }
 
@@ -166,9 +175,12 @@ std::string SettingsManager::getSettings(){
     json["tlg_token"] = settings.tlg_token;
     json["tlg_user"] = settings.tlg_user;
     json["access_code"] = settings.access_code==""?"------":settings.access_code;
+    json["access_code_lifetime"] = settings.access_code_lifetime;
     json["user_login"] = settings.user_login;
     json["user_passwd"] = settings.user_passwd;
     json["web_auth"] = settings.web_auth;
+    json["child_lock"] = settings.child_lock;
+    json["mqtt_retain"] = settings.mqtt_retain;
     std::string message;
     serializeJson(json, message);
     ESP_LOGD (TAG, "%s", message.c_str());
@@ -261,6 +273,16 @@ std::string SettingsManager::setDelayAfterClose(uint16_t value) {
     return message;
 }
 
+std::string SettingsManager::setCodeLifeTime(uint16_t value) {
+    settings.access_code_lifetime = value;
+    JsonDocument json;
+    json["access_code_lifetime"] = settings.access_code_lifetime;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
 std::string SettingsManager::setDelayFilter(uint16_t value) {
     settings.delay_filter = value;
     JsonDocument json;
@@ -286,6 +308,26 @@ std::string SettingsManager::setLed(bool value) {
     settings.led = value;
     JsonDocument json;
     json["led"] = settings.led;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setChildLock(bool value) {
+    settings.child_lock = value;
+    JsonDocument json;
+    json["child_lock"] = settings.child_lock;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setRetain(bool value) {
+    settings.mqtt_retain = value;
+    JsonDocument json;
+    json["mqtt_retain"] = settings.mqtt_retain;
     std::string message;
     serializeJson(json, message);
     ESP_LOGD (TAG, "%s", message.c_str());
