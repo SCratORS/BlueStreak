@@ -2,17 +2,18 @@
   - greeting
 */
 
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.0.9-Web Insider Preview 08.2024 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.0-Web Insider Preview 08.2024 Firmware"
 #define COPYRIGHT "SCratORS © 2024"
 #define DISCOVERY_DELAY 500
-#define led_status    16        // Индикатор статуса API, GPIO2 - это встроенный синий светодиод на ESP12
-#define led_indicator 13        // Дополнительный индикатор, который будет показывать режимы и прочее.
-#define detect_line   12        // Пин детектора вызова
-#define button_boot   0         // Кнопка управления платой и перевода в режим прошивки
-#define relay_line    14        // Пин "Переключение линии, плата/трубка"
-#define switch_open   17        // Пин "Открытие двери"
-#define switch_phone  4         // Пин "Трубка положена/поднята"
+#define led_status    GPIO_NUM_16        // Индикатор статуса API
+#define led_indicator GPIO_NUM_13        // Дополнительный индикатор, который будет показывать режимы и прочее.
+#define detect_line   GPIO_NUM_12        // Пин детектора вызова
+#define button_boot   GPIO_NUM_0         // Кнопка управления платой и перевода в режим прошивки
+#define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
+#define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
+#define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
 #define ACCEPT_FILENAME "/media/access_allowed.mp3"
+#define GREETING_FILENAME "/media/greeting_allowed.mp3"
 #define REJECT_FILENAME "/media/access_denied.mp3"
 #define DELIVERY_FILENAME "/media/delivery_allowed.mp3"
 #define SETTING_FILENAME "/settings.json"
@@ -78,7 +79,7 @@ std::string reject_call_name = "Сбросить вызов";
 std::string delivery_call_name = "Открыть курьеру";
 std::string access_code_name = "Код открытия: ";
 std::string access_code_delete_name = "Удалить код";
-enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, DROP, ENDING, RESET};
+enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
 uint8_t currentAction = WAIT;
 uint32_t detectMillis = 0;
 uint32_t audioLength = 0;
@@ -243,8 +244,10 @@ std::string getMediaExists() {
   JsonDocument json;
   json["fs_used"] = get_fs_used();
   json["access_allowed_play"] = aFS.exists(ACCEPT_FILENAME)?ACCEPT_FILENAME:NULL;
+  json["greeting_allowed_play"] =    aFS.exists(GREETING_FILENAME)?GREETING_FILENAME:NULL;
   json["delivery_allowed_play"] = aFS.exists(DELIVERY_FILENAME)?DELIVERY_FILENAME:NULL;
   json["access_denied_play"] =    aFS.exists(REJECT_FILENAME)?REJECT_FILENAME:NULL;
+
   std::string message;
   serializeJson(json, message);
   ESP_LOGI (TAG, "%s", message.c_str());
@@ -280,32 +283,32 @@ void IRAM_ATTR TimerHandler0() {
   portENTER_CRITICAL_ISR(&timerMux);
   if (hw_status.last_error) {
     if (ledErrorCounter++ < hw_status.last_error * 10) {
-      digitalWrite(led_status, (ledErrorCounter%10 < 5)?1:0);
-      analogWrite(led_indicator, (ledErrorCounter%10 < 5)?80:1);
+      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
+      ledcWrite(0, (ledErrorCounter%10 < 5)?40:1);
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else if (settings_manager && settings_manager->last_error) {
     if (ledErrorCounter++ < settings_manager->last_error * 10) {
-      digitalWrite(led_status, (ledErrorCounter%10 < 5)?1:0);
-      analogWrite(led_indicator, (ledErrorCounter%10 < 5)?80:0);
+      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
+      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else if (wifi_manager && wifi_manager->last_error) {
     if (ledErrorCounter++ < wifi_manager->last_error * 10) {
-      digitalWrite(led_status, (ledErrorCounter%10 < 5)?1:0);
-      analogWrite(led_indicator, (ledErrorCounter%10 < 5)?80:0);
+      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
+      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else if (mqtt_manager && mqtt_manager->last_error) {
     if (ledErrorCounter++ < mqtt_manager->last_error * 10) {
-      digitalWrite(led_status, (ledErrorCounter%10 < 5)?1:0);
-      analogWrite(led_indicator, (ledErrorCounter%10 < 5)?80:0);
+      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
+      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else if (tlg_manager && tlg_manager->last_error) {
     if (ledErrorCounter++ < tlg_manager->last_error * 10) {
-      digitalWrite(led_status, (ledErrorCounter%10 < 5)?1:0);
-      analogWrite(led_indicator, (ledErrorCounter%10 < 5)?80:0);
+      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
+      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else {
@@ -313,37 +316,37 @@ void IRAM_ATTR TimerHandler0() {
 
       if (settings_manager->settings.reject_call) {
           switch (ledStatusCounter++) {
-              case 0: digitalWrite(led_status, 1); break;
-              case 1: digitalWrite(led_status, 0); break;
+              case 0: gpio_set_level(led_status, 1); break;
+              case 1: gpio_set_level(led_status, 0); break;
               case 40: ledStatusCounter = 0; break;
               default: if (ledStatusCounter > 40) ledStatusCounter = 0;
           }
-      } else digitalWrite(led_status, 0);
+      } else gpio_set_level(led_status, 0);
 
       if (currentAction != WAIT) {
         switch (ledIndicatorCounter++) {
-            case 0: analogWrite(led_indicator, 240); break;
-            case 1: analogWrite(led_indicator, 0); ledIndicatorCounter = 0;break;
+            case 0: ledcWrite(0, 240); break;
+            case 1: ledcWrite(0, 0); ledIndicatorCounter = 0;break;
             default: if (ledIndicatorCounter > 1) ledIndicatorCounter = 0; break;
         }
       } else if (settings_manager->settings.accept_call) {
         switch (ledIndicatorCounter++) {
-            case 0: analogWrite(led_indicator, 240); break;
-            case 2: analogWrite(led_indicator, 0); break;
+            case 0: ledcWrite(0, 240); break;
+            case 2: ledcWrite(0, 0); break;
             case 40: ledIndicatorCounter = 0; break;
             default: if (ledIndicatorCounter > 40) ledIndicatorCounter = 0; break;
         }
       } else if (settings_manager->settings.mute) {
         ledIndicatorCounter++;
         if (ledIndicatorCounter < 40) {
-            analogWrite(led_indicator, ledIndicatorCounter * 6);
+            ledcWrite(0, ledIndicatorCounter * 6);
         } else if (ledIndicatorCounter < 80) {
-            analogWrite(led_indicator, (80 - ledIndicatorCounter) * 6);
+            ledcWrite(0, (80 - ledIndicatorCounter) * 6);
         } else ledIndicatorCounter = 0;
-      } else analogWrite(led_indicator, 0);
+      } else ledcWrite(0, 0);
     } else {
-      digitalWrite(led_status, 0);
-      analogWrite(led_indicator, 0);
+      gpio_set_level(led_status, 0);
+      ledcWrite(0, 0);
     }
   }
   portEXIT_CRITICAL_ISR(&timerMux);
@@ -354,8 +357,8 @@ void call_detector_enable() {
   reset_time = millis();
   if (currentAction == WAIT) {
     if (settings_manager->settings.mute) {
-      digitalWrite(switch_phone, 1);  
-      digitalWrite(relay_line, 1);
+      gpio_set_level(switch_phone, 1);  
+      gpio_set_level(relay_line, 1);
     }
     detectMillis = millis();
     currentAction = CALLING;
@@ -364,8 +367,8 @@ void call_detector_enable() {
 
 void phone_disable_action () {
     if (currentAction == WAIT) {
-      digitalWrite(switch_phone, settings_manager->settings.phone_disable); 
-      digitalWrite(relay_line, settings_manager->settings.phone_disable);
+      gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
+      gpio_set_level(relay_line, settings_manager->settings.phone_disable);
     }
 }
 
@@ -374,7 +377,7 @@ void doAction(uint32_t timer) {
   switch (currentAction) {
     case WAIT:  break;
     case CALLING: if (millis() - reset_time > settings_manager->settings.call_end_delay) currentAction = RESET;
-                  if (timer > settings_manager->settings.delay_filter && !digitalRead(detect_line)) {
+                  if (timer > settings_manager->settings.delay_filter && !gpio_get_level(detect_line)) {
                     if (!device_status.line_detect) {
                       setLineDetect(true);
                       setLineStatus(l_status_call);
@@ -390,8 +393,8 @@ void doAction(uint32_t timer) {
                   }
                   break;
     case CALL:  if (timer > timerAction) {
-                  digitalWrite(switch_phone, 0);  
-                  digitalWrite(relay_line, 1);
+                  gpio_set_level(switch_phone, 0);  
+                  gpio_set_level(relay_line, 1);
                   setLineStatus(l_status_answer);
                   timerAction += settings_manager->settings.delay_before;
                   currentAction = SWUP;
@@ -427,14 +430,42 @@ void doAction(uint32_t timer) {
                 } break;
     case PREOPEN: if (timer > timerAction) currentAction = SWOPEN;
                   break;
-    case SWOPEN:digitalWrite(switch_open, 1);
-                setLineStatus(l_status_open); 
-                currentAction = DROP;
-                timerAction += (audioLength + settings_manager->settings.delay_open);
+    case SWOPEN:  gpio_set_level(switch_open, 1);
+                  setLineStatus(l_status_open);
+                  timerAction += (audioLength + settings_manager->settings.delay_open);
+                  currentAction = settings_manager->settings.greeting?GREETING:DROP;
+                  break;
+    case GREETING: if (timer > timerAction) {
+                    if (settings_manager->settings.sound) {
+                      audioFile = new aAudioFileSource(GREETING_FILENAME);
+                      if (audioFile) {
+                        setLineStatus(l_status_answer);
+                        audioPlayer = new AudioGeneratorMP3();
+                        audioPlayer->begin(audioFile, audioOut);
+                        audioLength = millis();
+                        currentAction = GREETING_VOICE;
+                        gpio_set_level(switch_open, 0);
+                        timerAction += settings_manager->settings.greeting_delay;
+                        break;
+                      }
+                    }
+                    currentAction = DROP;
+                  } break;
+    case GREETING_VOICE: 
+                if (timer > timerAction) {
+                  if (!audioPlayer->loop()) {
+                    audioPlayer->stop();
+                    audioLength = millis() - audioLength;
+                    delete audioPlayer;
+                    delete audioFile;
+                    timerAction += audioLength;
+                    currentAction = DROP;
+                  }
+                }
                 break;
     case DROP:  if (timer > timerAction) {
-                  digitalWrite(switch_open, 0);
-                  digitalWrite(switch_phone, 1); 
+                  gpio_set_level(switch_open, 0);
+                  gpio_set_level(switch_phone, 1); 
                   setLineStatus(l_status_reject);
                   currentAction = ENDING;
                   timerAction += settings_manager->settings.delay_after;
@@ -442,9 +473,9 @@ void doAction(uint32_t timer) {
     case ENDING:if (timer > timerAction) {
                   currentAction = RESET;
                 } break;
-    case RESET: digitalWrite(relay_line, settings_manager->settings.phone_disable);
-                digitalWrite(switch_phone, settings_manager->settings.phone_disable); 
-                digitalWrite(switch_open, 0);
+    case RESET: gpio_set_level(relay_line, settings_manager->settings.phone_disable);
+                gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
+                gpio_set_level(switch_open, 0);
                 settings_manager->settings.accept_call = false;
                 settings_manager->settings.delivery = false;
                 settings_manager->settings.reject_call = false;
@@ -704,19 +735,19 @@ void save_settings(){
 
 void factory_reset() {
   ESP_LOGW(TAG, "%s", "Factory reset");
-  digitalWrite(led_status, 1);
+  gpio_set_level(led_status, 1);
   delay(50);
-  digitalWrite(led_status, 0);
+  gpio_set_level(led_status, 0);
   delay(50);
-  digitalWrite(led_status, 1);
+  gpio_set_level(led_status, 1);
   delay(50);
-  digitalWrite(led_status, 0);
+  gpio_set_level(led_status, 0);
   delay(50);
-  digitalWrite(led_status, 1);
+  gpio_set_level(led_status, 1);
   delay(50);
-  digitalWrite(led_status, 0);
+  gpio_set_level(led_status, 0);
   delay(50);
-  digitalWrite(led_status, 1);
+  gpio_set_level(led_status, 1);
   settings_manager->ResetSettings();
   save_settings();
 }
@@ -743,8 +774,10 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setDelayAfterClose") { ws.textAll(settings_manager->setDelayAfterClose(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayFilter") { ws.textAll(settings_manager->setDelayFilter(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setCallEndDelay") { ws.textAll(settings_manager->setCallEndDelay(doc["value"].as<uint16_t>()).c_str()); return; }
+    if (doc["method"] == "setGreetingDelay") { ws.textAll(settings_manager->setGreetingDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setLed")      { setLed(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
+    if (doc["method"] == "setGreeting") { ws.textAll(settings_manager->setGreeting(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setMute")     { setMute(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setRetain")   { ws.textAll(settings_manager->setRetain(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setChildLock"){ ws.textAll(settings_manager->setChildLock(doc["value"].as<bool>()).c_str()); return; }
@@ -788,6 +821,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       std::string value = doc["value"].as<std::string>();
       std::string file = "";
       if (value == "access_allowed") file = ACCEPT_FILENAME;
+      if (value == "greeting_allowed") file = GREETING_FILENAME;
       if (value == "delivery_allowed") file = DELIVERY_FILENAME;
       if (value == "access_denied") file = REJECT_FILENAME;
       if (file != "" && aFS.exists(file.c_str()) && aFS.remove(file.c_str())) ws.textAll(getMediaExists().c_str());
@@ -990,14 +1024,46 @@ void wifi_loop ( void * pvParameters ) {
 void setup() {
   Serial.begin(115200);
   /* Hardware setup */
-  pinMode(led_status, OUTPUT);
-  pinMode(led_indicator, OUTPUT);
-  pinMode(detect_line, INPUT_PULLUP);
-  pinMode(button_boot, INPUT);
-  pinMode(relay_line, OUTPUT);
-  pinMode(switch_open, OUTPUT);
-  pinMode(switch_phone, OUTPUT); 
+
+  gpio_reset_pin(led_status);
+  gpio_set_direction(led_status, GPIO_MODE_OUTPUT);
+  gpio_set_drive_capability(led_status, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(led_status, GPIO_FLOATING);
+
+  gpio_reset_pin(led_indicator);
+  gpio_set_direction(led_indicator, GPIO_MODE_OUTPUT);
+  gpio_set_drive_capability(led_indicator, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(led_indicator, GPIO_FLOATING);
+  ledcSetup(0, 500, 8);
+  ledcAttachPin(led_indicator, 0);
+
+  gpio_reset_pin(detect_line);
+  gpio_set_direction(detect_line, GPIO_MODE_INPUT);
+  gpio_set_drive_capability(detect_line, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(detect_line, GPIO_PULLUP_ONLY);
+
+  gpio_reset_pin(button_boot);
+  gpio_set_direction(button_boot, GPIO_MODE_INPUT);
+  gpio_set_drive_capability(button_boot, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(button_boot, GPIO_FLOATING);
+
+  gpio_reset_pin(relay_line);
+  gpio_set_direction(relay_line, GPIO_MODE_OUTPUT);
+  gpio_set_drive_capability(relay_line, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(relay_line, GPIO_FLOATING);
+
+  gpio_reset_pin(switch_open);
+  gpio_set_direction(switch_open, GPIO_MODE_OUTPUT);
+  gpio_set_drive_capability(switch_open, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(switch_open, GPIO_FLOATING);
+
+  gpio_reset_pin(switch_phone);
+  gpio_set_direction(switch_phone, GPIO_MODE_OUTPUT);
+  gpio_set_drive_capability(switch_phone, GPIO_DRIVE_CAP_0);
+  gpio_set_pull_mode(switch_phone, GPIO_FLOATING);
+
   attachInterrupt(detect_line, call_detector_enable, FALLING);
+  
   audioOut->SetOutputModeMono(true);
   timer0 = timerBegin(0, 80, true); // 12,5 ns * 80 = 1000ns = 1us
   timerAttachInterrupt(timer0, &TimerHandler0, false); //edge interrupts do not work, use false
@@ -1016,7 +1082,7 @@ void setup() {
   ESP_LOGI(TAG, "Settings init");
   settings_manager = new SettingsManager(SETTING_FILENAME);
   settings_manager->LoadSettings(aFS);
-  if (currentAction == WAIT) digitalWrite(relay_line, settings_manager->settings.phone_disable); 
+  if (currentAction == WAIT) gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
 
   ESP_LOGI(TAG, "WiFi init");
   wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
@@ -1062,7 +1128,7 @@ void loop() {
   if (currentAction != WAIT) doAction(millis()-detectMillis);
 
   if (!settings_manager->settings.child_lock) {
-    bool btnState = !digitalRead(button_boot);
+    bool btnState = !gpio_get_level(button_boot);
     if (btnState && !btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
         btnPressFlag = true;
         last_toggle = millis();
