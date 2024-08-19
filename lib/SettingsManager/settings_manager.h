@@ -19,8 +19,9 @@ class SettingsManager {
             bool delivery = false;
             bool reject_call = false;
             bool led = true;
-            bool sound = true;;
-            bool mute = false;;
+            bool sound = true;
+            bool greeting = false;
+            bool mute = false;
             bool phone_disable = false;
             bool ftp = false;
             uint8_t modes = 0;
@@ -30,6 +31,7 @@ class SettingsManager {
             uint16_t delay_after = 3000;
             uint16_t delay_filter  = 10;
             uint16_t call_end_delay  = 6000;
+            u_int16_t greeting_delay = 1000;
             const uint16_t delay_before_open_door = 100;
             std::string time_server = DEFAULT_TIME_SERVER;
             std::string wifi_ssid = "";
@@ -59,6 +61,7 @@ class SettingsManager {
         std::string setCallEndDelay(uint16_t value);
         std::string setDelayFilter(uint16_t value);
         std::string setCodeLifeTime(uint16_t value);
+        std::string setGreetingDelay(uint16_t value);
         std::string setLed(bool value);
         std::string setSound(bool value);
         std::string setMute(bool value);
@@ -75,6 +78,7 @@ class SettingsManager {
         std::string setTLGUser(std::string value);
         std::string setTLGCode(std::string value); 
         std::string setAuth(bool value);
+        std::string setGreeting(bool value);
         std::string setChildLock(bool value);
         std::string setUserLogin(std::string value);
         std::string setUserPassword(std::string value);

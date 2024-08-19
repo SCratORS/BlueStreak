@@ -104,6 +104,14 @@
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
+        <div class = "text">Длительность звука открытия</div>
+        <div class="custom-input right" style="width: 25%;">
+          <input id="greeting_delay" type="number" class="text right" title="greeting_delay" placeholder="" onchange="sendCommand('setGreetingDelay',this.value)">
+          <div class="text right">мс.</div>   
+        </div>
+      </div>
+      <div class = "panel top control no-padding-bottom">
+        <div class = "icon icon_clock"></div>
         <div class = "text">Задержка после сброса</div>
         <div class="custom-input right" style="width: 25%;">
           <input id="delay_after" type="number" class="text right" title="delay_after" placeholder="" onchange="sendCommand('setDelayAfterClose',this.value)">
@@ -139,6 +147,14 @@
         <div class = "text">Аудиосообщение</div>
         <label class="switch">
           <input id="sound" type="checkbox" title="sound" placeholder="" onclick="sendCommand('setSound',this.checked)">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <div class = "panel top control add-margin">
+        <div class = "icon icon_greeting"></div>
+        <div class = "text">Приветствие</div>
+        <label class="switch">
+          <input id="greeting" type="checkbox" title="greeting" placeholder="" onclick="sendCommand('setGreeting',this.checked)">
           <span class="slider round"></span>
         </label>
       </div>
@@ -341,6 +357,18 @@
         </div>
       </div>
       <div id="access_allowed_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
+      <div class = "panel top control add-margin-top no-padding-bottom">
+        <div class = "icon icon_mp3"></div>
+        <div class = "text">Сообщение после открытия</div>
+        <div class = "horizontal-grid right">
+          <input type="file" id="greeting_allowed" accept=".mp3" hidden onchange="uploadMedia(this);">
+          <audio id="greeting_allowed_play" src="" type="audio/mpeg"></audio>   
+          <button id="greeting_allowed_play_btn_play" class="flat_button right" onclick="document.getElementById('greeting_allowed_play').play();" hidden><div class = "flat_icon icon_play"></div></button>
+          <button id="greeting_allowed_play_btn_delete" class="flat_button right" onclick="sendCommand('mediaDelete','greeting_allowed');" hidden><div class = "flat_icon icon_trash"></div></button>
+          <button class="flat_button right" onclick="document.getElementById('greeting_allowed').click();"><div class = "flat_icon icon_upload"></div></button>
+        </div>
+      </div>
+      <div id="greeting_allowed_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
       <div class = "panel top control add-margin-top no-padding-bottom">
         <div class = "icon icon_mp3"></div>
         <div class = "text">Сообщение для курьера</div>

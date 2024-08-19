@@ -217,6 +217,7 @@ function uploadMedia(element) {
     uploading = true;
     let progress = 'access_allowed_progress';
     if (element.id == 'access_allowed') progress = 'access_allowed_progress';
+    if (element.id == 'greeting_allowed') progress = 'greeting_allowed_progress';
     if (element.id == 'delivery_allowed') progress = 'delivery_allowed_progress';
     if (element.id == 'access_denied') progress = 'access_denied_progress';
 
@@ -237,7 +238,7 @@ function uploadMedia(element) {
 
 function updateOTA(element) {
   const file = element.files[0];
-  if (uploading) alert("Дождитесь окончания предыдущей загузки.");
+  if (uploading) alert("Дождитесь окончания предыдущей загрузки.");
   if (!file) return;
   if (file.size > 4 * BYTES_IN_MB) {
     alert('Очень большой файл.')

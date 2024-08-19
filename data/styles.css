@@ -122,9 +122,6 @@ progress {
   aspect-ratio: 1 / 1;
   display: block;
 }
-.icon_internet {
-  background-image: url('images/network.svg');
-}
 .icon_door-open {
   background-image: url(images/door-open.svg);
 }
@@ -224,6 +221,11 @@ progress {
 .icon_timer-sand {
   background-image: url(images/timer-sand.svg);
 }
+.icon_greeting {
+  background-image: url(images/greeting.svg);
+}
+
+
 .list-box{
 	width: 100%;
 }

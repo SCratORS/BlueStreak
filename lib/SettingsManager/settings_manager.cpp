@@ -40,6 +40,7 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.led = json["led"].as<bool>();
         settings.sound = json["sound"].as<bool>();
         settings.mute = json["mute"].as<bool>();
+        settings.greeting = json["greeting"].as<bool>();
         settings.phone_disable = json["phone_disable"].as<bool>();
         settings.modes = json["modes"].as<uint8_t>();
         settings.server_type = json["server_type"].as<uint8_t>();
@@ -48,6 +49,7 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.delay_after = json["delay_after"].as<uint16_t>();
         settings.delay_filter = json["delay_filter"].as<uint16_t>();
         settings.call_end_delay = json["call_end_delay"].as<uint16_t>();
+        settings.greeting_delay = json["greeting_delay"].as<uint16_t>();
         settings.mqtt_port = json["mqtt_port"].as<uint16_t>();
         settings.wifi_ssid = json["ssid"].as<std::string>();
         settings.wifi_passwd = json["wifi_passwd"].as<std::string>();
@@ -83,6 +85,7 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["reject_call"] = settings.reject_call;
         json["led"] = settings.led;
         json["sound"] = settings.sound;
+        json["greeting"] = settings.greeting;
         json["mute"] = settings.mute;
         json["phone_disable"] = settings.phone_disable;
         json["modes"] = settings.modes;
@@ -92,6 +95,7 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["delay_after"] = settings.delay_after;
         json["delay_filter"] = settings.delay_filter;
         json["call_end_delay"] = settings.call_end_delay;
+        json["greeting_delay"] = settings.greeting_delay;
         json["mqtt_port"] = settings.mqtt_port;
         json["ssid"] = settings.wifi_ssid;
         json["wifi_passwd"] = settings.wifi_passwd;
@@ -123,10 +127,12 @@ void SettingsManager::ResetSettings() {
     settings.led = true;
     settings.sound = true;
     settings.mute = false;
+    settings.greeting = false;
     settings.phone_disable = false;
     settings.modes = 0;
     settings.server_type = 0;
     settings.delay_before = 1000;
+    settings.greeting_delay = 1000;
     settings.delay_open = 600;
     settings.delay_after = 3000;
     settings.delay_filter = 10;
@@ -157,6 +163,7 @@ std::string SettingsManager::getSettings(){
     json["reject_call"] = settings.reject_call;
     json["led"] = settings.led;
     json["sound"] = settings.sound;
+    json["greeting"] = settings.greeting;
     json["mute"] = settings.mute;
     json["phone_disable"] = settings.phone_disable;
     json["modes"] = settings.modes;
@@ -166,6 +173,7 @@ std::string SettingsManager::getSettings(){
     json["delay_after"] = settings.delay_after;
     json["delay_filter"] = settings.delay_filter;
     json["call_end_delay"] = settings.call_end_delay;
+    json["greeting_delay"] = settings.greeting_delay;
     json["mqtt_port"] = settings.mqtt_port;
     json["ssid"] = settings.wifi_ssid;
     json["wifi_passwd"] = settings.wifi_passwd;
@@ -303,6 +311,15 @@ std::string SettingsManager::setCallEndDelay(uint16_t value) {
     return message;
 }
 
+std::string SettingsManager::setGreetingDelay(uint16_t value) {
+    settings.greeting_delay = value;
+    JsonDocument json;
+    json["greeting_delay"] = settings.greeting_delay;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
 
 std::string SettingsManager::setLed(bool value) {
     settings.led = value;
@@ -488,6 +505,16 @@ std::string SettingsManager::setAuth(bool value) {
     settings.web_auth = value;
     JsonDocument json;
     json["web_auth"] = settings.web_auth;
+    std::string message;
+    serializeJson(json, message);
+    ESP_LOGD (TAG, "%s", message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setGreeting(bool value) {
+    settings.greeting = value;
+    JsonDocument json;
+    json["greeting"] = settings.greeting;
     std::string message;
     serializeJson(json, message);
     ESP_LOGD (TAG, "%s", message.c_str());
