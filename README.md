@@ -1,6 +1,6 @@
 # BlueStreak Firmware
 
-![](https://github.com/SCratORS/BlueStreak/blob/main/images/screen.jpg)
+![](https://github.com/SCratORS/BlueStreak/blob/main/images/bs.png)
 
 Прошивка для устройств [SmartIntercom Nelma ext](https://github.com/SCratORS/SmartIntercom). 
 
