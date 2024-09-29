@@ -51,7 +51,7 @@ void Select::mqttDiscovery(DevInfo* dev_info) {
     serializeJson(json, txt);
     callback_topic = home_topic + cmd_t;
     state_topic = home_topic + stat_t;
-    client->beginPublish(discovery_topic.c_str(), txt.length(), false);
+    client->beginPublish(discovery_topic.c_str(), txt.length(), (*retain));
     client->print(txt.c_str());
     client->endPublish();
     client->subscribe(callback_topic.c_str());
