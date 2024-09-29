@@ -27,7 +27,7 @@ void BinarySensor::mqttDiscovery(DevInfo* dev_info) {
     dev["cu"] = dev_info->control;
     serializeJson(json, txt);
     state_topic = home_topic + stat_t;
-    client->beginPublish(discovery_topic.c_str(), txt.length(), false);
+    client->beginPublish(discovery_topic.c_str(), txt.length(), (*retain));
     client->print(txt.c_str());
     client->endPublish();
     vTaskDelay(pdMS_TO_TICKS(500));  

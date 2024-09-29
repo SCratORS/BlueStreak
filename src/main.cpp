@@ -1,8 +1,4 @@
-/* TODO
-  - greeting
-*/
-
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.0-Web Insider Preview 08.2024 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.1-Web Insider Preview 10.2024 Firmware"
 #define COPYRIGHT "SCratORS © 2024"
 #define DISCOVERY_DELAY 500
 #define led_status    GPIO_NUM_16        // Индикатор статуса API
@@ -858,7 +854,7 @@ void onREST(AsyncWebServerRequest *request) {
       request->send(404);
     } else {
       if (p->name() == "ftp") {
-        ws.textAll(enable_ftp_server(p->value() == "true").c_str());
+        if (p->value() != "") ws.textAll(enable_ftp_server(p->value() == "true").c_str());
         json["ftp"] = settings_manager->settings.ftp;
         continue;
       }
@@ -868,28 +864,28 @@ void onREST(AsyncWebServerRequest *request) {
         continue;
       }
       if (p->name() == "accept") {
-        setAccept(p->value() == "true");
+        if (p->value() != "") setAccept(p->value() == "true");
         json["accept_call"] = settings_manager->settings.accept_call;
         json["delivery"] = settings_manager->settings.delivery;
         json["reject_call"] = settings_manager->settings.reject_call;
         continue;
       }
       if (p->name() == "reject") {
-        setReject(p->value() == "true");
+        if (p->value() != "") setReject(p->value() == "true");
         json["accept_call"] = settings_manager->settings.accept_call;
         json["delivery"] = settings_manager->settings.delivery;
         json["reject_call"] = settings_manager->settings.reject_call;
         continue;
       }
       if (p->name() == "delivery") {
-        setDelivery(p->value() == "true");
+        if (p->value() != "") setDelivery(p->value() == "true");
         json["accept_call"] = settings_manager->settings.accept_call;
         json["delivery"] = settings_manager->settings.delivery;
         json["reject_call"] = settings_manager->settings.reject_call;
         continue;
       }
       if (p->name() == "mode") {
-        setMode(atoi(p->value().c_str()));
+        if (p->value() != "") setMode(atoi(p->value().c_str()));
         json["modes"] = settings_manager->settings.modes;
         continue;
       }
