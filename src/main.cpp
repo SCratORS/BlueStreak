@@ -1,4 +1,4 @@
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.1-Web Insider Preview 10.2024 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.2-Web Insider Preview 10.2024 Firmware"
 #define COPYRIGHT "SCratORS © 2024"
 #define DISCOVERY_DELAY 500
 #define led_status    GPIO_NUM_16        // Индикатор статуса API
@@ -144,8 +144,8 @@ void send_tlg_mode_kb(bool edit, std::string chat_id) {
   tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
 }
 
-void send_tlg_start_kb(bool edit, std::string chat_id) {
-  // Отправляем клавиатуру стартового меню
+void send_tlg_config_kb(bool edit, std::string chat_id) {
+  // Отправляем клавиатуру конфигурационного меню
   std::string welcome = "SmartIntercom - Домофон:\n";
   std::string message = modes_name+": "+mode_name[settings_manager->settings.modes]+"\n" +
   (settings_manager->settings.accept_call?"🟢":"⚫️") + " " + accept_call_name + "\t" + 
@@ -158,6 +158,14 @@ void send_tlg_start_kb(bool edit, std::string chat_id) {
   (access_code_name) + " " + (settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code) + "\t" +
   (access_code_delete_name);
   std::string commands = "modes, accept, delivery, reject, mute, sound, led, phone_disable, generate_code, delete_code";
+  tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
+}
+
+void send_tlg_start_kb(bool edit, std::string chat_id) {
+  // Отправляем клавиатуру быстрых действий
+  std::string welcome = "SmartIntercom - Домофон:\n";
+  std::string message = (settings_manager->settings.accept_call?"🟢":"⚫️") + std::string(" ") + accept_call_name + "\t" + (settings_manager->settings.reject_call?"🟢":"⚫️") + " " + reject_call_name;
+  std::string commands = "fast_accept, fast_reject";
   tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
 }
 
@@ -588,6 +596,7 @@ void tlg_callback(FB_msg& msg) {
 
   //private message 
   if (txt == "/start") send_tlg_start_kb(false, chat_id);
+  else if (txt == "/config") send_tlg_config_kb(false, chat_id);
   else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == txt) {
     if (!settings_manager->access_code_expires) {
       if (settings_manager->settings.access_code_lifetime) tlg_manager->sendMessage("🔐 Код не активирован.", chat_id);
@@ -604,7 +613,7 @@ void tlg_callback(FB_msg& msg) {
   else if (cmd == "reject_once") {setReject(true); tlg_manager->sendMessage("Сбрасываю вызов.", chat_id);}
   else if (cmd == "generate_code") {
     tlg_code_generate();
-    send_tlg_start_kb(true, chat_id);
+    send_tlg_config_kb(true, chat_id);
     tlg_manager->getTLGClient()->setTextMode(FB_MARKDOWN);
     tlg_manager->sendMessage("`" + settings_manager->settings.access_code + "`", chat_id);
     tlg_manager->getTLGClient()->setTextMode(FB_TEXT);
@@ -613,15 +622,16 @@ void tlg_callback(FB_msg& msg) {
     if (cmd == "mode_0") setMode(0);
     if (cmd == "mode_1") setMode(1);
     if (cmd == "mode_2") setMode(2);
-    if (cmd == "accept") setAccept(!settings_manager->settings.accept_call);
+    if (cmd == "accept" || cmd == "fast_accept") setAccept(!settings_manager->settings.accept_call);
     if (cmd == "delivery") setDelivery(!settings_manager->settings.delivery);
-    if (cmd == "reject") setReject(!settings_manager->settings.reject_call);
+    if (cmd == "reject" || cmd == "fast_reject") setReject(!settings_manager->settings.reject_call);
     if (cmd == "mute") setMute(!settings_manager->settings.mute);
-    if (cmd == "sound") setMute(!settings_manager->settings.sound);
+    if (cmd == "sound") setSound(!settings_manager->settings.sound);
     if (cmd == "led") setLed(!settings_manager->settings.led);
     if (cmd == "phone_disable") setPhoneDisable(!settings_manager->settings.phone_disable);
     if (cmd == "delete_code") tlg_code_delete();
-    send_tlg_start_kb(true, chat_id);
+    if (cmd.find("fast_") == std::string::npos) send_tlg_config_kb(true, chat_id);
+    else send_tlg_start_kb(true, chat_id);
   }
 }
 
@@ -856,6 +866,11 @@ void onREST(AsyncWebServerRequest *request) {
       if (p->name() == "ftp") {
         if (p->value() != "") ws.textAll(enable_ftp_server(p->value() == "true").c_str());
         json["ftp"] = settings_manager->settings.ftp;
+        continue;
+      }
+      if (p->name() == "mute") {
+        if (p->value() != "") setMute(p->value() == "true");
+        json["mute"] = settings_manager->settings.mute;
         continue;
       }
       if (p->name() == "reset") {
