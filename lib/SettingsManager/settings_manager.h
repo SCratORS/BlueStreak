@@ -1,3 +1,8 @@
+#pragma once
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.3-Web Insider Preview 10.2024 Firmware"
+#define COPYRIGHT "SCratORS © 2024"
+#define DISCOVERY_DELAY 500
+
 #include "stdint.h"
 #include <string>
 #include <FS.h>
