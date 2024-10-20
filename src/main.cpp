@@ -1,6 +1,3 @@
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.2-Web Insider Preview 10.2024 Firmware"
-#define COPYRIGHT "SCratORS © 2024"
-#define DISCOVERY_DELAY 500
 #define led_status    GPIO_NUM_16        // Индикатор статуса API
 #define led_indicator GPIO_NUM_13        // Дополнительный индикатор, который будет показывать режимы и прочее.
 #define detect_line   GPIO_NUM_12        // Пин детектора вызова
@@ -19,8 +16,8 @@
 #define l_status_open "Открытие двери"
 #define l_status_reject "Сброс вызова"
 #define l_status_close "Закрыто"
-#define STACK_SIZE 32768
-#define CRITICAL_FREE 300000
+#define STACK_SIZE 8192
+#define CRITICAL_FREE 65536
 
 #include <ESPAsyncWebserver.h>
 #include <Update.h>
@@ -65,7 +62,7 @@
 
 static const char* TAG = "MAIN";
 std::string mode_name[3] = {"Не активен","Сброс вызова","Открывать всегда"}; 
-std::string modes_name = "Режим работы";
+std::string modes_name = "Постоянный режим работы";
 std::string sound_name = "Аудиосообщения";
 std::string led_name = "Светоиндикация";
 std::string mute_name = "Беззвучный режим";
@@ -128,47 +125,6 @@ uint8_t ledIndicatorCounter = 0;
 uint8_t ledStatusCounter = 0;
 uint8_t ledErrorCounter = 0;
 
-void send_tlg_actions_kb(std::string chat_id){
-  // Отправляем клавиатуру выбора действия
-  std::string welcome = "Входящий вызов в домофон!\n";
-  std::string message = "✅ " + accept_call_name + "\t" + "🚚 " + delivery_call_name + "\t" + "🚷 " + reject_call_name;
-  std::string commands =  "accept_once, delivery_once, reject_once";
-  tlg_manager->sendMenu(welcome, message, commands, false, chat_id);
-}
-
-void send_tlg_mode_kb(bool edit, std::string chat_id) {
-  // Отправляем клавиатуру выбора режима
-  std::string welcome = "Выбор постоянного режима работы:\n";
-  std::string message = mode_name[0] + "\n" + mode_name[1] + "\n" + mode_name[2];
-  std::string commands =  "mode_0, mode_1, mode_2";
-  tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
-}
-
-void send_tlg_config_kb(bool edit, std::string chat_id) {
-  // Отправляем клавиатуру конфигурационного меню
-  std::string welcome = "SmartIntercom - Домофон:\n";
-  std::string message = modes_name+": "+mode_name[settings_manager->settings.modes]+"\n" +
-  (settings_manager->settings.accept_call?"🟢":"⚫️") + " " + accept_call_name + "\t" + 
-  (settings_manager->settings.delivery?"🟢":"⚫️") + " " + delivery_call_name + "\t" + 
-  (settings_manager->settings.reject_call?"🟢":"⚫️") + " " + reject_call_name + "\n" + 
-  (settings_manager->settings.mute?"🟢":"⚫️") + " " + mute_name + "\t" + 
-  (settings_manager->settings.sound?"🟢":"⚫️") + " " + sound_name + "\n" + 
-  (settings_manager->settings.led?"🟢":"⚫️") + " " + led_name + "\t" + 
-  (settings_manager->settings.phone_disable?"🟢":"⚫️") + " " + phone_disable_name + "\n" +
-  (access_code_name) + " " + (settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code) + "\t" +
-  (access_code_delete_name);
-  std::string commands = "modes, accept, delivery, reject, mute, sound, led, phone_disable, generate_code, delete_code";
-  tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
-}
-
-void send_tlg_start_kb(bool edit, std::string chat_id) {
-  // Отправляем клавиатуру быстрых действий
-  std::string welcome = "SmartIntercom - Домофон:\n";
-  std::string message = (settings_manager->settings.accept_call?"🟢":"⚫️") + std::string(" ") + accept_call_name + "\t" + (settings_manager->settings.reject_call?"🟢":"⚫️") + " " + reject_call_name;
-  std::string commands = "fast_accept, fast_reject";
-  tlg_manager->sendMenu(welcome, message, commands, edit, chat_id);
-}
-
 void mqtt_publish_once_actions(){
   if (accept_once) accept_once->publishValue();
   if (delivery_once) delivery_once->publishValue();
@@ -205,14 +161,14 @@ void setLineDetect(bool value){
   ESP_LOGI (TAG, "%s", message.c_str());
   if (line_detect) line_detect->publishValue();
   if (tlg_manager) {
-    if (settings_manager->settings.delivery) tlg_manager->sendMessage("🚚 Входящий вызов в домофон!\nОткрываю дверь один раз.", settings_manager->settings.tlg_user);
-    else if (settings_manager->settings.accept_call) tlg_manager->sendMessage("✅ Входящий вызов в домофон!\nОткрываю дверь один раз.", settings_manager->settings.tlg_user);
-    else if (settings_manager->settings.reject_call) tlg_manager->sendMessage("🚷 Входящий вызов в домофон!\nСбрасываю вызов.", settings_manager->settings.tlg_user);
+    if (settings_manager->settings.delivery) tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚚 Входящий вызов в домофон!\nОткрываю дверь один раз.", true);
+    else if (settings_manager->settings.accept_call) tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✅ Входящий вызов в домофон!\nОткрываю дверь один раз.", true);
+    else if (settings_manager->settings.reject_call) tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚷 Входящий вызов в домофон!\nСбрасываю вызов.", true);
     else {
       switch (settings_manager->settings.modes) {
-        case 0: send_tlg_actions_kb(settings_manager->settings.tlg_user); break;
-        case 1: tlg_manager->sendMessage("🚷 Входящий вызов в домофон!\nСбрасываю вызов.", settings_manager->settings.tlg_user); break;
-        case 2: tlg_manager->sendMessage("✅ Входящий вызов в домофон!\nОткрываю дверь.", settings_manager->settings.tlg_user); break;
+        case 0: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🛎 Входящий вызов в домофон!", true); break;
+        case 1: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚷 Входящий вызов в домофон!\nСбрасываю вызов.", true); break;
+        case 2: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✅ Входящий вызов в домофон!\nОткрываю дверь.", true); break;
       }
     }
   }
@@ -426,8 +382,8 @@ void doAction(uint32_t timer) {
     case VOICE: if (!audioPlayer->loop()) {
                   audioPlayer->stop();
                   audioLength = millis() - audioLength;
-                  delete audioPlayer;
-                  delete audioFile;
+                  delete audioPlayer; audioPlayer = nullptr;
+                  delete audioFile; audioFile = nullptr;
                   currentAction = ( settings_manager->settings.delivery || 
                                     settings_manager->settings.accept_call || 
                                     (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? SWOPEN : DROP;
@@ -460,8 +416,8 @@ void doAction(uint32_t timer) {
                   if (!audioPlayer->loop()) {
                     audioPlayer->stop();
                     audioLength = millis() - audioLength;
-                    delete audioPlayer;
-                    delete audioFile;
+                    delete audioPlayer; audioPlayer = nullptr;
+                    delete audioFile; audioFile = nullptr;
                     timerAction += audioLength;
                     currentAction = DROP;
                   }
@@ -501,8 +457,7 @@ std::string enable_ftp_server(bool value) {
     settings_manager->settings.ftp = false;
     if (ftp_server) {
       ftp_server->stop();
-      delete ftp_server;
-      ftp_server = nullptr;
+      delete ftp_server; ftp_server = nullptr;
     }
   }
   JsonDocument json;
@@ -569,70 +524,64 @@ void tlg_code_delete(){
     settings_manager->SaveSettings(aFS);
 }
 
-void tlg_callback(FB_msg& msg) {
-  std::string cmd = msg.data.c_str();
-  std::string txt = msg.text.c_str();
-  std::string chat_id = msg.chatID.c_str();
-  ESP_LOGI(TAG,"Callback: chat: %s cmd:%s txt:%s", chat_id.c_str(), cmd.c_str(), txt.c_str());
-  
-  //public message  
-  if (settings_manager->settings.tlg_user.find(chat_id) == std::string::npos) {
-    if (txt == "/start") tlg_manager->sendMessage("🏠 Введите код доступа.", chat_id);
-    else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == txt) {
-      if (settings_manager->settings.access_code_lifetime && !settings_manager->access_code_expires) {
-        settings_manager->access_code_expires = millis()+(settings_manager->settings.access_code_lifetime * 60000);
-        std::string lifetime = std::to_string(settings_manager->settings.access_code_lifetime);
-        tlg_manager->sendMessage("⚠️ Код успешно активирован. Срок действия кода: " + lifetime + " мин.", chat_id);
+void tlg_message(std::string from_id, std::string chat_id, std::string message) {
+  if (settings_manager->settings.tlg_user.find(from_id) == std::string::npos) {
+      //public message 
+      if (message == "/start") tlg_manager->sendMessage(chat_id, "🏠 Введите код доступа.");
+      else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == message) {
+        if (settings_manager->settings.access_code_lifetime && !settings_manager->access_code_expires) {
+          settings_manager->access_code_expires = millis()+(settings_manager->settings.access_code_lifetime * 60000);
+          std::string lifetime = std::to_string(settings_manager->settings.access_code_lifetime);
+          tlg_manager->sendMessage(chat_id, "⚠️ Код успешно активирован. Срок действия кода: " + lifetime + " мин.");
+        }
+        setAccept(true);
+        tlg_manager->sendMessage(chat_id, "✅ Доступ разрешён. Дверь будет открыта.");
+        tlg_manager->sendMessage(settings_manager->settings.tlg_user, "⚠️ Разрешён доступ по коду.");
+      } else {
+        tlg_manager->sendMessage(chat_id, "⛔️ Доступ запрещён.");
+        if (settings_manager->settings.access_code == "") tlg_manager->sendMessage(settings_manager->settings.tlg_user, "❗️Попытка ввода кода или сообщение. ID пользователя: " + chat_id + " Текст: " + message);
       }
-      setAccept(true);
-      tlg_manager->sendMessage("✅ Доступ разрешён. Дверь будет открыта.", chat_id);
-      tlg_manager->sendMessage("⚠️ Разрешён доступ по коду.", settings_manager->settings.tlg_user);
     } else {
-      tlg_manager->sendMessage("⛔️ Доступ запрещён.", chat_id);
-      if (settings_manager->settings.access_code == "") tlg_manager->sendMessage("❗️Попытка ввода кода или сообщение. ID пользователя: " + chat_id + " Текст: "+ txt, settings_manager->settings.tlg_user);
+      //private message 
+      if (message == "/start") tlg_manager->sendStartMessage(chat_id);
+      else if (message == "/control") tlg_manager->sendControlPanel(false, chat_id);
+      else if (message == "/settings") tlg_manager->sendSettingsPanel(false, chat_id);
+      else if (message == "✅ Открой дверь") {setAccept(true); tlg_manager->sendMessage(chat_id, "Открываю дверь.");}
+      else if (message == "🚚 Открой курьеру") {setDelivery(true); tlg_manager->sendMessage(chat_id, "Открываю дверь курьеру.");}
+      else if (message == "🚷 Сбрось вызов") {setReject(true); tlg_manager->sendMessage(chat_id, "Сбрасываю вызов.");}
+      else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == message) {
+        if (!settings_manager->access_code_expires) {
+          if (settings_manager->settings.access_code_lifetime) tlg_manager->sendMessage(chat_id, "🔐 Код не активирован.");
+          else tlg_manager->sendMessage(chat_id, "🔐 Код активен без срока действия.");
+        } else {
+          std::string lifetime = std::to_string((settings_manager->access_code_expires - millis()) / 60000);
+          tlg_manager->sendMessage(chat_id, "🕓 До окончания срока действия кода осталось: " + lifetime + " мин.");
+        }
+      }
     }
-    return;
-  } 
+}
 
-  //private message 
-  if (txt == "/start") send_tlg_start_kb(false, chat_id);
-  else if (txt == "/config") send_tlg_config_kb(false, chat_id);
-  else if (settings_manager->settings.access_code != "" && settings_manager->settings.access_code == txt) {
-    if (!settings_manager->access_code_expires) {
-      if (settings_manager->settings.access_code_lifetime) tlg_manager->sendMessage("🔐 Код не активирован.", chat_id);
-      else tlg_manager->sendMessage("🔐 Код активен без срока действия.", chat_id);
-    } else {
-      std::string lifetime = std::to_string((settings_manager->access_code_expires - millis()) / 60000);
-      tlg_manager->sendMessage("🕓 До окончания срока действия кода осталось: " + lifetime + " мин.", chat_id);
-    }
-  }
-  else if (cmd == "") return;
-  else if (cmd == "modes") send_tlg_mode_kb(true, chat_id);
-  else if (cmd == "accept_once") {setAccept(true); tlg_manager->sendMessage("Открываю дверь.", chat_id);}
-  else if (cmd == "delivery_once") {setDelivery(true); tlg_manager->sendMessage("Открываю дверь курьеру.", chat_id);}
-  else if (cmd == "reject_once") {setReject(true); tlg_manager->sendMessage("Сбрасываю вызов.", chat_id);}
-  else if (cmd == "generate_code") {
+void tlg_callback_query(std::string from_id, std::string chat_id, std::string callback_query) {
+  if (settings_manager->settings.tlg_user.find(from_id) == std::string::npos) return; // Только приватный доступ
+  if (callback_query == "") return; // Пустой запрос
+
+  if (callback_query == "modes") tlg_manager->sendModeKeyboard(true, chat_id);
+  else if (callback_query == "generate_code") {
     tlg_code_generate();
-    send_tlg_config_kb(true, chat_id);
-    tlg_manager->getTLGClient()->setTextMode(FB_MARKDOWN);
-    tlg_manager->sendMessage("`" + settings_manager->settings.access_code + "`", chat_id);
-    tlg_manager->getTLGClient()->setTextMode(FB_TEXT);
-  }
-  else {
-    if (cmd == "mode_0") setMode(0);
-    if (cmd == "mode_1") setMode(1);
-    if (cmd == "mode_2") setMode(2);
-    if (cmd == "accept" || cmd == "fast_accept") setAccept(!settings_manager->settings.accept_call);
-    if (cmd == "delivery") setDelivery(!settings_manager->settings.delivery);
-    if (cmd == "reject" || cmd == "fast_reject") setReject(!settings_manager->settings.reject_call);
-    if (cmd == "mute") setMute(!settings_manager->settings.mute);
-    if (cmd == "sound") setSound(!settings_manager->settings.sound);
-    if (cmd == "led") setLed(!settings_manager->settings.led);
-    if (cmd == "phone_disable") setPhoneDisable(!settings_manager->settings.phone_disable);
-    if (cmd == "delete_code") tlg_code_delete();
-    if (cmd.find("fast_") == std::string::npos) send_tlg_config_kb(true, chat_id);
-    else send_tlg_start_kb(true, chat_id);
-  }
+    tlg_manager->sendSettingsPanel(true, chat_id);
+    tlg_manager->sendMessage(chat_id, "`" + settings_manager->settings.access_code + "`", false, "MarkdownV2");
+  } 
+  else if (callback_query == "mode_0") { setMode(0); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "mode_1") { setMode(1); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "mode_2") { setMode(2); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "accept") { setAccept(!settings_manager->settings.accept_call); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "delivery") { setDelivery(!settings_manager->settings.delivery); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "reject") { setReject(!settings_manager->settings.reject_call); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "mute") { setMute(!settings_manager->settings.mute); tlg_manager->sendSettingsPanel(true, chat_id);}
+  else if (callback_query == "sound") { setSound(!settings_manager->settings.sound); tlg_manager->sendSettingsPanel(true, chat_id);}
+  else if (callback_query == "led") { setLed(!settings_manager->settings.led); tlg_manager->sendSettingsPanel(true, chat_id);}
+  else if (callback_query == "phone_disable") { setPhoneDisable(!settings_manager->settings.phone_disable); tlg_manager->sendSettingsPanel(true, chat_id);}
+  else if (callback_query == "delete_code") { tlg_code_delete(); tlg_manager->sendSettingsPanel(true, chat_id); }
 }
 
 void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
@@ -693,28 +642,46 @@ void entity_delete() {
   delete(modes);modes = nullptr;
 }
 
+
+TaskHandle_t getTLGUpdateTask;
+void getTLGUpdate(void * pvParameters) {
+  while (tlg_manager && tlg_manager->enabled()) {
+    tlg_manager->getUpdate();
+  }
+  delete (tlg_manager); tlg_manager = nullptr;
+  vTaskDelete(getTLGUpdateTask);
+}
+
+
 void enable_tlg(bool value){
   if (value) {
     if (tlg_manager) return;
-    tlg_manager = new TLGManager(settings_manager->settings.tlg_token);
-//  tlg_manager->setUser(settings_manager->settings.tlg_user); //Это не надо. Будем фильтровать руками
-    tlg_manager->getTLGClient()->attach(tlg_callback);
-    tlg_manager->begin();
-  } else {
-    if (tlg_manager) {
-      delete (tlg_manager);
-      tlg_manager = nullptr;
+    tlg_manager = new TLGManager();
+    tlg_manager->settings_manager = settings_manager;
+    tlg_manager->setToken(settings_manager->settings.tlg_token);
+    tlg_manager->message = tlg_message;
+    tlg_manager->callback_query = tlg_callback_query;
+    if (tlg_manager->begin()) {
+      xTaskCreatePinnedToCore(getTLGUpdate, "Telegram update task", STACK_SIZE, NULL, tskIDLE_PRIORITY, &getTLGUpdateTask, tskNO_AFFINITY);
+    } else {
+      sendAlert("Ошибка авторизации на сервере Telegram, или проблемы с сетью. Попробуйте перезагрузить.");
+      tlg_manager->stop();
+      delete (tlg_manager); tlg_manager = nullptr;
     }
+  } else {
+    if (tlg_manager) tlg_manager->stop();
   }
 }
 
 void enable_mqtt(bool value) {
   if (value) {
     if (mqtt_manager) return;
-    mqtt_manager = new MQTTManager(settings_manager->settings.mqtt_server,
-                                                      settings_manager->settings.mqtt_port,
-                                                      settings_manager->settings.mqtt_login,
-                                                      settings_manager->settings.mqtt_passwd);
+    mqtt_manager = new MQTTManager(
+      settings_manager->settings.mqtt_server,
+      settings_manager->settings.mqtt_port,
+      settings_manager->settings.mqtt_login,
+      settings_manager->settings.mqtt_passwd
+    );
     mqtt_manager->device_info = device_info;
     mqtt_manager->setClientID(device_info->mqtt_entity_id);
     mqtt_manager->getMQTTClient()->setCallback(mqtt_callback);
@@ -722,8 +689,7 @@ void enable_mqtt(bool value) {
     mqtt_manager->begin();
   } else {
     if (mqtt_manager) {
-      delete (mqtt_manager);
-      mqtt_manager = nullptr;
+      delete (mqtt_manager); mqtt_manager = nullptr;
       entity_delete();
     }
   }
@@ -868,9 +834,18 @@ void onREST(AsyncWebServerRequest *request) {
         json["ftp"] = settings_manager->settings.ftp;
         continue;
       }
+      if (p->name() == "send") {
+        if (p->value() != "")
+        json["send"] = tlg_manager?(tlg_manager->sendMessage(settings_manager->settings.tlg_user, p->value().c_str(), true)?"ok":"error"):"telegram not active";
+        continue;
+      }
       if (p->name() == "mute") {
         if (p->value() != "") setMute(p->value() == "true");
         json["mute"] = settings_manager->settings.mute;
+        continue;
+      }
+      if (p->name() == "heap") {
+        json["heap"] = ESP.getFreeHeap();
         continue;
       }
       if (p->name() == "reset") {
@@ -1017,7 +992,6 @@ void wifi_loop ( void * pvParameters ) {
       wifi_manager->handle();
       if (settings_manager->settings.server_type == 1 && mqtt_manager) mqtt_manager->handle();
       if (settings_manager->settings.server_type == 2 && tlg_manager) {
-        tlg_manager->handle();
         if (  settings_manager->settings.access_code != "" &&
               settings_manager->settings.access_code_lifetime &&
               settings_manager->access_code_expires &&
@@ -1125,7 +1099,6 @@ void setup() {
 
 void loop() {
   rtc_wdt_feed();
- 
   if (wifi_manager->Connected()) {
       if (!hw_status.time_configure && !timeConfigTask) {
         ws.textAll(getStatus().c_str());

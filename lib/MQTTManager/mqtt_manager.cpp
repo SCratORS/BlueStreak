@@ -18,10 +18,8 @@ MQTTManager::~MQTTManager() {
     mqtt_client->disconnect();
     entities.clear();
     callback_entity.clear();
-    delete mqtt_client;
-    mqtt_client = nullptr;
-    delete ns_client;
-    ns_client = nullptr;
+    delete mqtt_client; mqtt_client = nullptr;
+    delete ns_client; ns_client = nullptr;
 }
 
 void MQTTManager::device_discovery() {

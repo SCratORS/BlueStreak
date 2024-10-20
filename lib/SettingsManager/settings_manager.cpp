@@ -1,7 +1,6 @@
 #include "settings_manager.h"
 #include <ArduinoJson.h>
 
-
 static const char* TAG = "SETTING";
 
 SettingsManager::SettingsManager(std::string filename) {
