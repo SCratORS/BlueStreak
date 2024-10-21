@@ -12,12 +12,13 @@ class TLGManager {
         void setUpdate(uint64_t update_id) {this->update_id = update_id;}
         void sendMenu();
         bool sendMessage(std::string, std::string, bool force = false, std::string mode = "");
-        void (*message)(std::string, std::string, std::string);
+        void (*message)(std::string, std::string, std::string, std::string);
         void (*callback_query)(std::string, std::string, std::string);
         bool sendControlPanel(bool, std::string);
         bool sendSettingsPanel(bool, std::string);
         bool sendModeKeyboard(bool, std::string);
         bool sendStartMessage(std::string);
+        bool sendOpenKeyboard(std::string, std::string);
         void getUpdate();
         bool enabled() {return tlg_started;}
         void stop(); 
@@ -25,9 +26,13 @@ class TLGManager {
         uint8_t last_error = 0;
         uint64_t menu_id = 0;
         SettingsManager * settings_manager;
+        void addPublicChatId(std::string);
+        bool deletePublicAccess(std::string chat_id = "");
+        std::string public_chat_id;
     private:
         HTTPClient * https_client;
         HTTPClient * https_client_post;
+
         std::string host;
         bool tlg_started = false;
         bool update_loop = false;

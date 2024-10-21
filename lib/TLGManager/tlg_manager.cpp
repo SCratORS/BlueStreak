@@ -26,11 +26,9 @@ TLGManager::TLGManager(){
 
 TLGManager::~TLGManager() {
     if (https_client) {
-        https_client->end();
         delete(https_client); https_client = nullptr;
     }
     if (https_client_post) {
-        https_client_post->end();
         delete(https_client_post); https_client_post = nullptr;
     }          
 }
@@ -119,6 +117,44 @@ bool TLGManager::sendStartMessage(std::string chat_id) {
     return responce["ok"].as<bool>();
 }
 
+bool TLGManager::deletePublicAccess(std::string chat_id){
+    if (public_chat_id == "" && chat_id == "") return true;
+    JsonDocument json;
+    json["method"] = "sendMessage";
+    json["chat_id"] = chat_id == ""?public_chat_id.c_str():chat_id.c_str();
+    json["text"] = chat_id==""?"⚠️ Срок действия кода завершён.":"⛔️ Доступ запрещён.";
+    JsonObject reply_markup = json["reply_markup"].to<JsonObject>();
+    reply_markup["remove_keyboard"] = true;
+    std::string request;   
+    serializeJson(json, request);
+    JsonDocument responce;
+    deserializeJson(responce, (char*)post(request, true).c_str());
+    public_chat_id = "";
+    return responce["ok"].as<bool>();
+}
+
+void TLGManager::addPublicChatId(std::string chat_id) {
+    if (public_chat_id == "") public_chat_id = chat_id;
+    else if (public_chat_id.find(chat_id) == std::string::npos) public_chat_id = public_chat_id + "," + chat_id;
+}
+
+bool TLGManager::sendOpenKeyboard(std::string chat_id, std::string message) {
+    JsonDocument json;
+    json["method"] = "sendMessage";
+    json["chat_id"] = chat_id.c_str();
+    json["text"] = message.c_str();
+    JsonObject reply_markup = json["reply_markup"].to<JsonObject>();
+    reply_markup["resize_keyboard"] = true;
+    JsonArray keyboard = reply_markup["keyboard"].to<JsonArray>();
+    JsonArray keyboard_row = keyboard.add<JsonArray>();
+    keyboard_row.add("✅ Открой дверь");
+    std::string request;   
+    serializeJson(json, request);
+    JsonDocument responce;
+    deserializeJson(responce, (char*)post(request).c_str());
+    return responce["ok"].as<bool>();
+}
+
 bool TLGManager::sendModeKeyboard(bool edit, std::string chat_id) {
     std::string welcome = "Выбор постоянного режима работы:";
     JsonDocument json;
@@ -143,7 +179,7 @@ bool TLGManager::sendModeKeyboard(bool edit, std::string chat_id) {
 
     JsonArray keyboard_row_2 = inline_keyboard.add<JsonArray>();
     JsonDocument mode_2;
-    mode_2["text"] = mode_name[0];
+    mode_2["text"] = mode_name[2];
     mode_2["callback_data"] = "mode_2";
     keyboard_row_2.add(mode_2);
 
@@ -346,9 +382,10 @@ void TLGManager::getUpdate() {
             if (!result["message"].isNull()) {
                 JsonDocument msg = result["message"];
                 std::string from_id = msg["from"]["id"].as<std::string>();
+                std::string user_name = msg["from"]["username"].as<std::string>();
                 std::string chat_id = msg["chat"]["id"].as<std::string>();
                 std::string text = msg["text"].as<std::string>();
-                message(from_id, chat_id, text);
+                message(from_id, chat_id, text, user_name);
             }
             if (!result["callback_query"].isNull()) {
                 JsonDocument query = result["callback_query"];

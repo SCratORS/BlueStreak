@@ -516,15 +516,17 @@ void tlg_code_generate(){
     code = code + std::to_string(esp_random())[0];
     ws.textAll(settings_manager->setTLGCode(code).c_str());
     settings_manager->access_code_expires = 0;
+    tlg_manager->deletePublicAccess();
     settings_manager->SaveSettings(aFS);
 }
 void tlg_code_delete(){
     ws.textAll(settings_manager->setTLGCode("").c_str());
     settings_manager->access_code_expires = 0;
+    tlg_manager->deletePublicAccess();
     settings_manager->SaveSettings(aFS);
 }
 
-void tlg_message(std::string from_id, std::string chat_id, std::string message) {
+void tlg_message(std::string from_id, std::string chat_id, std::string message, std::string user_name) {
   if (settings_manager->settings.tlg_user.find(from_id) == std::string::npos) {
       //public message 
       if (message == "/start") tlg_manager->sendMessage(chat_id, "🏠 Введите код доступа.");
@@ -532,14 +534,33 @@ void tlg_message(std::string from_id, std::string chat_id, std::string message) 
         if (settings_manager->settings.access_code_lifetime && !settings_manager->access_code_expires) {
           settings_manager->access_code_expires = millis()+(settings_manager->settings.access_code_lifetime * 60000);
           std::string lifetime = std::to_string(settings_manager->settings.access_code_lifetime);
-          tlg_manager->sendMessage(chat_id, "⚠️ Код успешно активирован. Срок действия кода: " + lifetime + " мин.");
+          tlg_manager->sendOpenKeyboard(chat_id, "⚠️ Код успешно активирован.\n🕓 Срок действия кода: " + lifetime + " мин.\n✅ Используйте клавиатуру снизу для открытия двери.\n✉️ Введите текст сообщения для отправки его Администратору.");
+          tlg_manager->addPublicChatId(from_id);
+          tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✅ Код активирован пользователем @"+user_name);
+        } else {
+          if (!settings_manager->access_code_expires) {
+            if (!settings_manager->settings.access_code_lifetime) {
+              tlg_manager->sendOpenKeyboard(chat_id, "⚠️ Код принят.\n✅ Используйте клавиатуру снизу для открытия двери.\n✉️ Введите текст сообщения для отправки его Администратору.");
+              tlg_manager->addPublicChatId(from_id);
+              tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✅ Код активирован пользователем @"+user_name);
+            }
+          } else {
+            std::string lifetime = std::to_string((settings_manager->access_code_expires - millis()) / 60000);
+            tlg_manager->sendOpenKeyboard(chat_id, "⚠️ Код принят.\n🕓 Срок действия кода: " + lifetime + " мин.\n✅ Используйте клавиатуру снизу для открытия двери\n✉️ Введите текст сообщения для отправки его Администратору.");
+            tlg_manager->addPublicChatId(from_id);
+            tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✅ Код активирован пользователем @"+user_name);
+          }
         }
-        setAccept(true);
-        tlg_manager->sendMessage(chat_id, "✅ Доступ разрешён. Дверь будет открыта.");
-        tlg_manager->sendMessage(settings_manager->settings.tlg_user, "⚠️ Разрешён доступ по коду.");
+      } else if (tlg_manager->public_chat_id.find(from_id) == std::string::npos) {
+          if (message == "✅ Открой дверь") tlg_manager->deletePublicAccess(chat_id);
+          else tlg_manager->sendMessage(chat_id, "⛔️ Доступ запрещён.");          
+          if (settings_manager->settings.access_code == "") tlg_manager->sendMessage(settings_manager->settings.tlg_user, "❗️Попытка ввода кода или сообщение.\nПользователь: @" + user_name + "\nТекст:\n" + message);
       } else {
-        tlg_manager->sendMessage(chat_id, "⛔️ Доступ запрещён.");
-        if (settings_manager->settings.access_code == "") tlg_manager->sendMessage(settings_manager->settings.tlg_user, "❗️Попытка ввода кода или сообщение. ID пользователя: " + chat_id + " Текст: " + message);
+          if (message == "✅ Открой дверь") {setAccept(true); tlg_manager->sendMessage(chat_id, "Открываю дверь.");}
+          else {
+            tlg_manager->sendMessage(settings_manager->settings.tlg_user, "❗️Cообщение от пользователя @" + user_name + "\nТекст:\n" + message);
+            tlg_manager->sendMessage(chat_id, "Ваше сообщение отправлено Администратору.");
+          }
       }
     } else {
       //private message 
@@ -701,6 +722,7 @@ void save_settings(){
   wifi_manager->setPasswd(settings_manager->settings.wifi_passwd);
   enable_mqtt(false);
   enable_tlg(false);
+  delay(1000);
   enable_mqtt(settings_manager->settings.server_type == 1);
   enable_tlg(settings_manager->settings.server_type == 2);
 }
