@@ -1,5 +1,4 @@
 #include "tlg_manager.h"
-#include "esp_log.h"
 #include "ArduinoJson.h"
 
 static const char * TAG = "TLG";
@@ -51,19 +50,19 @@ std::string TLGManager::post(std::string content, bool force) {
     if (force && !https_client_post) force = false;
     if (force) {   
         update_loop = false;
-        ESP_LOGI(TAG, "request force post: %s",content.c_str());
+        Serial.printf("[%s] request force post: %s\n", TAG, content.c_str());
         if (https_client_post) {
             https_client_post->POST(content.c_str());
             responce = https_client_post->getString().c_str();
         }
     } else {
-        ESP_LOGI(TAG, "request post: %s",content.c_str());
+        Serial.printf("[%s] request post: %s\n", TAG, content.c_str());
         if (https_client) {
             https_client->POST(content.c_str());
             responce = https_client->getString().c_str();
         }
     }
-    ESP_LOGI(TAG, "post responce: %s", responce.c_str());
+    Serial.printf("[%s] post responce: %s\n", TAG, responce.c_str());
     if (force) update_loop = tlg_started;
     return responce;
 }
@@ -328,16 +327,37 @@ bool TLGManager::answerCallbackQuery(std::string callback_query_id) {
 }
 
 bool TLGManager::sendMessage(std::string chat_id, std::string message, bool force, std::string mode) {
+    int16_t start = 0;
+    int16_t end = chat_id.find(",");
+    bool result = chat_id.length() > 0;
+    while (end != -1  && result) {
+        std::string item_id = chat_id.substr(start, end - start);
+        item_id.erase(std::remove(item_id.begin(), item_id.end(), ' '), item_id.end());
+        start = end + 1;
+        end = chat_id.find(",", start);
+        JsonDocument json;
+        json["method"] = "sendMessage";
+        json["chat_id"] = item_id.c_str();
+        json["text"] = message.c_str();
+        if (mode != "") json["parse_mode"] = mode.c_str();
+        std::string request;
+        serializeJson(json, request);
+        JsonDocument responce;
+        deserializeJson(responce, (char*)post(request, force).c_str());
+        result = responce["ok"].as<bool>();
+    }
+    std::string item_id = chat_id.substr(start, end - start);
+    item_id.erase(std::remove(item_id.begin(), item_id.end(), ' '), item_id.end());
     JsonDocument json;
     json["method"] = "sendMessage";
-    json["chat_id"] = chat_id.c_str();
+    json["chat_id"] = item_id.c_str();
     json["text"] = message.c_str();
     if (mode != "") json["parse_mode"] = mode.c_str();
     std::string request;
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request, force).c_str());
-    return responce["ok"].as<bool>();
+    return result && responce["ok"].as<bool>();
 }
 
 bool TLGManager::begin() {
@@ -352,11 +372,11 @@ bool TLGManager::begin() {
             delete(https_client_post); https_client_post = nullptr;
         }
     } else {
-        ESP_LOGI(TAG, "Connection filed!");
+        Serial.printf("[%s] Connection filed!\n", TAG);
         last_error = 5;
     }
     if (!tlg_started) {
-        ESP_LOGI(TAG, "Telegram authorization failed!");
+        Serial.printf("[%s] Telegram authorization failed!\n", TAG);
         last_error = 5;
     } else update_loop = true;
     return tlg_started;

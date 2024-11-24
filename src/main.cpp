@@ -22,7 +22,7 @@
 #include <ESPAsyncWebserver.h>
 #include <Update.h>
 #include "FTPServer.h"
-#include "soc/rtc_wdt.h"
+#include "driver/pcnt.h"
 #include <ArduinoJson.h>
 #include "wifi_manager.h"
 #include "settings_manager.h"
@@ -125,6 +125,10 @@ uint8_t ledIndicatorCounter = 0;
 uint8_t ledStatusCounter = 0;
 uint8_t ledErrorCounter = 0;
 
+int16_t currentAddressCounter = 0;
+bool syncCounter = false;
+bool triggerCounter = false;
+
 void mqtt_publish_once_actions(){
   if (accept_once) accept_once->publishValue();
   if (delivery_once) delivery_once->publishValue();
@@ -147,7 +151,7 @@ void setLineStatus(std::string value){
   json["line_status"] = device_status.line_status;
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   if (line_status) line_status->publishValue();
   ws.textAll(message.c_str());
 }
@@ -158,7 +162,7 @@ void setLineDetect(bool value){
   json["line_detect"] = device_status.line_detect;
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   if (line_detect) line_detect->publishValue();
   if (tlg_manager) {
     if (settings_manager->settings.delivery) tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚚 Входящий вызов в домофон!\nОткрываю дверь один раз.", true);
@@ -180,7 +184,7 @@ void sendAlert(std::string value){
   json["alert"] = value;
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   ws.textAll(message.c_str());
 }
 
@@ -193,7 +197,7 @@ void sendStatus(){
   json["line_status"] = device_status.line_status;
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   ws.textAll(message.c_str());
   if (line_detect) line_detect->publishValue();
   if (line_status) line_status->publishValue();
@@ -204,13 +208,13 @@ std::string getMediaExists() {
   JsonDocument json;
   json["fs_used"] = get_fs_used();
   json["access_allowed_play"] = aFS.exists(ACCEPT_FILENAME)?ACCEPT_FILENAME:NULL;
-  json["greeting_allowed_play"] =    aFS.exists(GREETING_FILENAME)?GREETING_FILENAME:NULL;
+  json["greeting_allowed_play"] = aFS.exists(GREETING_FILENAME)?GREETING_FILENAME:NULL;
   json["delivery_allowed_play"] = aFS.exists(DELIVERY_FILENAME)?DELIVERY_FILENAME:NULL;
   json["access_denied_play"] =    aFS.exists(REJECT_FILENAME)?REJECT_FILENAME:NULL;
 
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
@@ -225,7 +229,7 @@ std::string getStatus(){
   json["copyright"] = COPYRIGHT;
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
@@ -312,9 +316,9 @@ void IRAM_ATTR TimerHandler0() {
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
+
 uint64_t reset_time = 0;
-void call_detector_enable() {
-  reset_time = millis();
+void calling_detect() {
   if (currentAction == WAIT) {
     if (settings_manager->settings.mute) {
       gpio_set_level(switch_phone, 1);  
@@ -325,10 +329,28 @@ void call_detector_enable() {
   }
 }
 
+void call_detector_enable() {
+  reset_time = millis();
+  if (currentAction == WAIT) {
+    if (settings_manager->settings.address_counter) {
+      if (!syncCounter) {
+        currentAddressCounter = 0;
+        pcnt_counter_clear(PCNT_UNIT_0);
+        syncCounter = true;
+      }
+    } else calling_detect();
+  }
+  if (currentAction == CALLING) {
+    if (settings_manager->settings.address_counter) {
+      if (!syncCounter && triggerCounter) currentAction = RESET;
+    }
+  }
+}
+
 void phone_disable_action () {
     if (currentAction == WAIT) {
       gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
-      gpio_set_level(relay_line, settings_manager->settings.phone_disable);
+      gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
     }
 }
 
@@ -336,7 +358,7 @@ uint64_t timerAction = 0;
 void doAction(uint32_t timer) {
   switch (currentAction) {
     case WAIT:  break;
-    case CALLING: if (millis() - reset_time > settings_manager->settings.call_end_delay) currentAction = RESET;
+    case CALLING: if (!triggerCounter && millis() - reset_time > settings_manager->settings.call_end_delay) currentAction = RESET;
                   if (timer > settings_manager->settings.delay_filter && !gpio_get_level(detect_line)) {
                     if (!device_status.line_detect) {
                       setLineDetect(true);
@@ -433,7 +455,7 @@ void doAction(uint32_t timer) {
     case ENDING:if (timer > timerAction) {
                   currentAction = RESET;
                 } break;
-    case RESET: gpio_set_level(relay_line, settings_manager->settings.phone_disable);
+    case RESET: gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
                 gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
                 gpio_set_level(switch_open, 0);
                 settings_manager->settings.accept_call = false;
@@ -464,13 +486,17 @@ std::string enable_ftp_server(bool value) {
   json["ftp"] = value;
   std::string message;
   serializeJson(json, message);
-  ESP_LOGI (TAG, "%s", message.c_str());
+  Serial.printf("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
 void setMode(uint8_t value) {
   ws.textAll(settings_manager->setMode(value).c_str());
   if (modes) modes->publishValue();
+}
+
+void setRoom(uint8_t value) {
+  ws.textAll(settings_manager->setAddressCounter(value).c_str());
 }
 
 void setAccept(bool value) {
@@ -609,7 +635,7 @@ void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
   payload[length] = 0;
   std::string strTopic = (char*)topic;
   std::string message  = (char*)payload;
-  ESP_LOGI(TAG, "MQTT TOPIC: %s MESSAGE: %s", strTopic.c_str(), message.c_str());
+  Serial.printf("[%s] MQTT TOPIC: %s MESSAGE: %s\n", TAG, strTopic.c_str(), message.c_str());
   mqtt_manager->getEntity(strTopic.c_str())->callback(message);
   
   if (strTopic == modes->callback_topic) setMode(settings_manager->settings.modes);
@@ -673,7 +699,6 @@ void getTLGUpdate(void * pvParameters) {
   vTaskDelete(getTLGUpdateTask);
 }
 
-
 void enable_tlg(bool value){
   if (value) {
     if (tlg_manager) return;
@@ -728,7 +753,7 @@ void save_settings(){
 }
 
 void factory_reset() {
-  ESP_LOGW(TAG, "%s", "Factory reset");
+  Serial.printf("[%s] Factory reset\n", TAG);
   gpio_set_level(led_status, 1);
   delay(50);
   gpio_set_level(led_status, 0);
@@ -752,7 +777,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     std::string json_text = (char*)data;
-    ESP_LOGI (TAG, "%s", json_text.c_str());
+    Serial.printf("[%s] %s\n", TAG, json_text.c_str());
     JsonDocument doc;
     deserializeJson(doc, json_text);
     if (doc["method"] == "getSettings") { ws.textAll(settings_manager->getSettings().c_str());
@@ -770,6 +795,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setCallEndDelay") { ws.textAll(settings_manager->setCallEndDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setGreetingDelay") { ws.textAll(settings_manager->setGreetingDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setLed")      { setLed(doc["value"].as<bool>()); return; }
+    if (doc["method"] == "setRoom")     { setRoom(doc["value"].as<uint8_t>()); return; }
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setGreeting") { ws.textAll(settings_manager->setGreeting(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setMute")     { setMute(doc["value"].as<bool>()); return; }
@@ -833,11 +859,11 @@ void onBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t in
 void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){ 
   if (!index) {
     request->_tempFile = aFS.open("/media/" + filename, "w");
-    ESP_LOGI(TAG, "Start upload file %s", filename.c_str());
+    Serial.printf("[%s] Start upload file %s\n", TAG, filename.c_str());
   }
   if (len) request->_tempFile.write(data, len);
   if (final) {
-    ESP_LOGI(TAG, "File upload complete %s", filename.c_str());
+    Serial.printf("[%s] File upload complete %s\n", TAG, filename.c_str());
     ws.textAll(getMediaExists().c_str());
     request->_tempFile.close();
   }
@@ -910,6 +936,16 @@ void onREST(AsyncWebServerRequest *request) {
         ESP.restart();
         continue;
       }
+      if (p->name() == "room") {
+        if (p->value() != "") setRoom(atoi(p->value().c_str()));
+        json["room"] = settings_manager->settings.address_counter;
+        continue;
+      }
+      if (p->name() == "save") {
+        settings_manager->SaveSettings(aFS);
+        json["save"] = "ok";
+        continue;
+      }
       json[p->name().c_str()] = "method undefined";
       continue;
     }
@@ -921,8 +957,8 @@ void onREST(AsyncWebServerRequest *request) {
 
 void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   switch (type) {
-    case WS_EVT_CONNECT: ESP_LOGI(TAG, "WebSocket client #%u connected from %s", client->id(), client->remoteIP().toString().c_str());  break;
-    case WS_EVT_DISCONNECT: ESP_LOGI(TAG, "WebSocket client #%u disconnected", client->id()); break;
+    case WS_EVT_CONNECT: Serial.printf("[%s] WebSocket client #%u connected from %s\n", TAG, client->id(), client->remoteIP().toString().c_str());  break;
+    case WS_EVT_DISCONNECT: Serial.printf("[%s] WebSocket client #%u disconnected\n", TAG, client->id()); break;
     case WS_EVT_DATA: handleWebSocketMessage(arg, data, len); break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR: break;
@@ -944,29 +980,29 @@ void web_server_init() {
     request->send(response);
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
     if(!index){
-      ESP_LOGI(TAG,"Update Start: %s\n", filename.c_str());
+      Serial.printf("[%s] Update Start: %s\n", TAG, filename.c_str());
       if (!Update.begin()) {
         std::string error = Update.errorString();
         sendAlert(error);
-        ESP_LOGI(TAG,"%s", error.c_str());
+        Serial.printf("[%s] %s\n", TAG, error.c_str());
       }
     }
     if(!Update.hasError()){
       if(Update.write(data, len) != len) {
         std::string error = Update.errorString();
         sendAlert(error);
-        ESP_LOGI(TAG,"%s", error.c_str());
+        Serial.printf("[%s] %s\n", TAG, error.c_str());
       }
     }
     if(final){
       if(Update.end(true)) {
         sendAlert("Обновление успешно завершено. Перезагрузите устройство.");
-        ESP_LOGI(TAG,"Update Success: %uB\n", index+len);
+        Serial.printf("[%s] Update Success: %uB\n", TAG, index+len);
       }
       else {
         std::string error = Update.errorString();
         sendAlert(error);
-        ESP_LOGI(TAG,"%s", error.c_str());
+        Serial.printf("[%s] %s\n", TAG, error.c_str());
       }
     }
   });
@@ -993,21 +1029,6 @@ void web_server_init() {
   hw_status.web_services_init = true;
 }
 
-TaskHandle_t timeConfigTask;
-void time_configure( void * pvParameters ) {   
-    ESP_LOGI(TAG, "Configurate time. Connect to: %s", settings_manager->settings.time_server.c_str());
-    configTime(0, 0, settings_manager->settings.time_server.c_str());
-    time_t now = time(nullptr);
-    while (now < 24 * 3600) {
-      vTaskDelay(pdMS_TO_TICKS(100));
-      now = time(nullptr);
-    }
-    randomSeed(micros());
-    ESP_LOGI(TAG, "Time configurate complete. Current timestamp: %d", now); 
-    hw_status.time_configure = true; 
-    vTaskDelete(timeConfigTask);
-}
-
 TaskHandle_t wifiTask;
 void wifi_loop ( void * pvParameters ) {   
     while (wifi_manager) { 
@@ -1031,7 +1052,6 @@ void wifi_loop ( void * pvParameters ) {
 void setup() {
   Serial.begin(115200);
   /* Hardware setup */
-
   gpio_reset_pin(led_status);
   gpio_set_direction(led_status, GPIO_MODE_OUTPUT);
   gpio_set_drive_capability(led_status, GPIO_DRIVE_CAP_0);
@@ -1069,40 +1089,56 @@ void setup() {
   gpio_set_drive_capability(switch_phone, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(switch_phone, GPIO_FLOATING);
 
+  pcnt_config_t pcnt_config = {
+      .pulse_gpio_num = detect_line,
+      .ctrl_gpio_num = PCNT_PIN_NOT_USED,
+      .lctrl_mode = PCNT_MODE_KEEP,
+      .hctrl_mode = PCNT_MODE_KEEP,
+      .pos_mode = PCNT_COUNT_DIS,
+      .neg_mode = PCNT_COUNT_INC,
+      .counter_h_lim = 256,
+      .counter_l_lim = 0,
+      .unit = PCNT_UNIT_0,
+      .channel = PCNT_CHANNEL_0,
+  };
+
+  pcnt_unit_config(&pcnt_config);
+  pcnt_set_filter_value(PCNT_UNIT_0, 100);
+  pcnt_filter_enable(PCNT_UNIT_0);
+  pcnt_counter_pause(PCNT_UNIT_0);
+  pcnt_counter_clear(PCNT_UNIT_0);
+  pcnt_counter_resume(PCNT_UNIT_0);
   attachInterrupt(detect_line, call_detector_enable, FALLING);
-  
+
   audioOut->SetOutputModeMono(true);
   timer0 = timerBegin(0, 80, true); // 12,5 ns * 80 = 1000ns = 1us
   timerAttachInterrupt(timer0, &TimerHandler0, false); //edge interrupts do not work, use false
   timerAlarmWrite(timer0, 50000, true);
   timerAlarmEnable(timer0);
+
   /* System startup */
+
   device_status.line_status = l_status_close;
-  ESP_LOGI(TAG, CONFIG_CHIP_DEVICE_PRODUCT_NAME);
-  ESP_LOGI(TAG, CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION);
-  ESP_LOGI(TAG, "System setup");
+  Serial.printf("[%s] %s\n", TAG, CONFIG_CHIP_DEVICE_PRODUCT_NAME);
+  Serial.printf("[%s] %s\n", TAG, CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION);
+  Serial.printf("[%s] %s\n", TAG, "System setup");
   if (!aFS.begin(true)) {
-    ESP_LOGE(TAG, "%s", "An Error has occurred while mounting file system.");
+    Serial.printf("[%s] %s\n", TAG, "An Error has occurred while mounting file system.");
     hw_status.last_error = 6;
     return;
   }
-  ESP_LOGI(TAG, "Settings init");
+  Serial.printf("[%s] %s\n", TAG, "Settings init");
   settings_manager = new SettingsManager(SETTING_FILENAME);
   settings_manager->LoadSettings(aFS);
-  if (currentAction == WAIT) gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
+  if (currentAction == WAIT) gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable); 
 
-  ESP_LOGI(TAG, "WiFi init");
+  Serial.printf("[%s] %s\n", TAG, "WiFi init");
   wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
   if (!hw_status.web_services_init) web_server_init();
-  ESP_LOGI(TAG, "%s", "Web services init complete");
-
-  rtc_wdt_set_length_of_reset_signal(RTC_WDT_SYS_RESET_SIG, RTC_WDT_LENGTH_3_2us);
-  rtc_wdt_set_stage(RTC_WDT_STAGE0, RTC_WDT_STAGE_ACTION_RESET_SYSTEM);
-  rtc_wdt_set_time(RTC_WDT_STAGE0, 500);
-  ESP_LOGI(TAG, "%s", "WDT configured");
+  Serial.printf("[%s] %s\n", TAG, "Web services init complete");
 
   xTaskCreatePinnedToCore(wifi_loop, "WiFi infinity loops", STACK_SIZE, NULL, tskIDLE_PRIORITY,  &wifiTask, tskNO_AFFINITY);
-  ESP_LOGI(TAG, "%s", "WiFi monitor started");
+  Serial.printf("[%s] %s\n", TAG, "WiFi monitor started");
 
   device_info = new DevInfo;
   device_info->name = CONFIG_CHIP_DEVICE_PRODUCT_NAME;
@@ -1113,27 +1149,44 @@ void setup() {
   std::string txt = WiFi.macAddress().c_str();
   size_t index;
   while ((index = txt.find(":")) != std::string::npos) txt.replace(index, 1, "");
-  ESP_LOGI(TAG, "MQTT ID: %s", txt.c_str());
+  Serial.printf("[%s] MQTT ID: %s\n", TAG, txt.c_str());
   device_info->mqtt_entity_id = txt;
   device_info->dev_name = "smartintercom";
-  ESP_LOGI(TAG, "System started.");
+
+  Serial.printf("[%s] %s\n", TAG, "System started.");
 }
 
 void loop() {
-  rtc_wdt_feed();
+
   if (wifi_manager->Connected()) {
-      if (!hw_status.time_configure && !timeConfigTask) {
+      if (!hw_status.time_configure) {
         ws.textAll(getStatus().c_str());
         sendAlert("Соединение с Wi-Fi Установлено!\nАдрес устройства: " + wifi_manager->ip);
-        xTaskCreatePinnedToCore(time_configure, "Get global time", STACK_SIZE, NULL, tskIDLE_PRIORITY, &timeConfigTask, tskNO_AFFINITY);
         enable_mqtt(settings_manager->settings.server_type == 1);
         enable_tlg(settings_manager->settings.server_type == 2);
+        hw_status.time_configure = true; 
       } 
   }
+ 
+  if (currentAction != WAIT) doAction(millis()-detectMillis); 
+  else if (settings_manager->settings.address_counter) {
+    if (syncCounter) {
+      if (millis() - reset_time > 190) {
+        pcnt_get_counter_value(PCNT_UNIT_0, &currentAddressCounter);
+        if (currentAddressCounter) {
+          triggerCounter = settings_manager->settings.address_counter == currentAddressCounter;
+          if (triggerCounter) {
+            gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
+            calling_detect();
+          }
+          Serial.printf("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
+        }
+        syncCounter = false;
+      }
+    }
+  }
 
-  if (currentAction != WAIT) doAction(millis()-detectMillis);
-
-  if (!settings_manager->settings.child_lock) {
+if (!settings_manager->settings.child_lock) {
     bool btnState = !gpio_get_level(button_boot);
     if (btnState && !btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
         btnPressFlag = true;
@@ -1152,5 +1205,6 @@ void loop() {
         last_toggle = millis();
     }
   }
+
 }
 

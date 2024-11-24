@@ -1,13 +1,11 @@
 #pragma once
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "Bluestreak 2.1.4-Web Insider Preview 10.2024 Firmware"
-#define COPYRIGHT "SCratORS © 2024"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.1.5-Web Insider Preview 11.2024 Firmware"
+#define COPYRIGHT "© SCHome (SmartHome Devices), 2024"
 #define DISCOVERY_DELAY 500
 
 #include "stdint.h"
 #include <string>
 #include <FS.h>
-
-#define DEFAULT_TIME_SERVER "pool.ntp.org"
 
 class SettingsManager {
     public:
@@ -36,9 +34,8 @@ class SettingsManager {
             uint16_t delay_after = 3000;
             uint16_t delay_filter  = 10;
             uint16_t call_end_delay  = 6000;
-            u_int16_t greeting_delay = 1000;
+            uint16_t greeting_delay = 1000;
             const uint16_t delay_before_open_door = 100;
-            std::string time_server = DEFAULT_TIME_SERVER;
             std::string wifi_ssid = "";
             std::string wifi_passwd = "";
             std::string mqtt_server = "";
@@ -54,6 +51,7 @@ class SettingsManager {
             bool child_lock = false;
             bool mqtt_retain = true;
             uint16_t access_code_lifetime = 0;
+            uint8_t address_counter = 0;
         } settings;
         std::string getSettings();
         std::string setMode(uint8_t value);
@@ -87,6 +85,7 @@ class SettingsManager {
         std::string setChildLock(bool value);
         std::string setUserLogin(std::string value);
         std::string setUserPassword(std::string value);
+        std::string setAddressCounter(uint8_t value);
 
     private:
         std::string filename;
