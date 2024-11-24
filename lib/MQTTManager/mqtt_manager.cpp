@@ -1,5 +1,4 @@
 #include "mqtt_manager.h"
-#include "esp_log.h"
 
 static const char * TAG = "MQTT";
 
@@ -43,7 +42,7 @@ void MQTTManager::handle() {
         if (millis() - previousMQTTMillis >= 15000) {
             mqtt_client->disconnect();
             mqtt_client->setServer(server.c_str(), port);
-            ESP_LOGI(TAG, "Attempting MQTT connection: %s:%d",server.c_str(), port);
+            Serial.printf("[%s] Attempting MQTT connection: %s:%d\n", TAG, server.c_str(), port);
             if (mqtt_client->connect(client_id.c_str(), login.c_str(), passwd.c_str())) {
                 previousMQTTMillis = millis();
                 last_error = 0;
@@ -51,7 +50,7 @@ void MQTTManager::handle() {
                 device_online();
             } else {
                 last_error = 5;
-                ESP_LOGI(TAG, "Connection error: %d",mqtt_client->state());
+                Serial.printf("[%s] Connection error: %d\n", TAG, mqtt_client->state());
             }
             previousMQTTMillis = millis();
         }
