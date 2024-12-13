@@ -33,6 +33,7 @@ class TLGManager {
         HTTPClient * https_client;
         HTTPClient * https_client_post;
         std::string host;
+        std::string request;
         bool tlg_started = false;
         bool update_loop = false;
         uint64_t update_id = 0;

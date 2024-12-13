@@ -32,10 +32,6 @@ void MQTTManager::device_online() {
     mqtt_client->publish((device_info->dev_name+"/status").c_str(), "online");
 }
 
-void MQTTManager::device_offline() {
-    mqtt_client->publish((device_info->dev_name+"/status").c_str(), "offline");
-}
-
 void MQTTManager::handle() {
     if (!mqtt_started) return;
     if (!mqtt_client->connected()) {
