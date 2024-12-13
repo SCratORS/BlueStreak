@@ -2,17 +2,7 @@
 #include "ArduinoJson.h"
 
 static const char * TAG = "TLG";
-extern std::string modes_name;
 extern std::string mode_name[3];
-extern std::string accept_call_name;
-extern std::string delivery_call_name;
-extern std::string reject_call_name;
-extern std::string phone_disable_name;
-extern std::string access_code_delete_name;
-extern std::string access_code_name;
-extern std::string led_name;
-extern std::string sound_name;
-extern std::string mute_name;
 
 TLGManager::TLGManager(){
     https_client = new HTTPClient();
@@ -24,12 +14,10 @@ TLGManager::TLGManager(){
 }
 
 TLGManager::~TLGManager() {
-    if (https_client) {
-        delete(https_client); https_client = nullptr;
-    }
-    if (https_client_post) {
-        delete(https_client_post); https_client_post = nullptr;
-    }          
+    if (https_client) delete(https_client); 
+    if (https_client_post) delete(https_client_post);
+    https_client = nullptr;
+    https_client_post = nullptr;          
 }
 
 void TLGManager::stop() {
@@ -70,7 +58,6 @@ std::string TLGManager::post(std::string content, bool force) {
 bool TLGManager::getMe() {
     JsonDocument json;
     json["method"] = "getMe";
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -89,7 +76,6 @@ bool TLGManager::setMyCommands() {
     cmd_settings["description"] = "Изменение настроек устройства";
     commands.add(cmd_control);
     commands.add(cmd_settings);
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -109,7 +95,6 @@ bool TLGManager::sendStartMessage(std::string chat_id) {
     keyboard_row.add("✅ Открой дверь");
     keyboard_row.add("🚚 Открой курьеру");
     keyboard_row.add("🚷 Сбрось вызов");
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -124,7 +109,6 @@ bool TLGManager::deletePublicAccess(std::string chat_id){
     json["text"] = chat_id==""?"⚠️ Срок действия кода завершён.":"⛔️ Доступ запрещён.";
     JsonObject reply_markup = json["reply_markup"].to<JsonObject>();
     reply_markup["remove_keyboard"] = true;
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request, true).c_str());
@@ -147,7 +131,6 @@ bool TLGManager::sendOpenKeyboard(std::string chat_id, std::string message) {
     JsonArray keyboard = reply_markup["keyboard"].to<JsonArray>();
     JsonArray keyboard_row = keyboard.add<JsonArray>();
     keyboard_row.add("✅ Открой дверь");
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -182,7 +165,6 @@ bool TLGManager::sendModeKeyboard(bool edit, std::string chat_id) {
     mode_2["callback_data"] = "mode_2";
     keyboard_row_2.add(mode_2);
 
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -242,7 +224,7 @@ bool TLGManager::sendSettingsPanel(bool edit, std::string chat_id){
 
     JsonArray inline_row_4 = inline_keyboard.add<JsonArray>();
     JsonDocument access_code_caption;
-    access_code_caption["text"] = access_code_name + " " + (settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code);
+    access_code_caption["text"] = std::string(access_code_name) + " " + (settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code);
     access_code_caption["callback_data"] = "generate_code";
     inline_row_4.add(access_code_caption);
     JsonDocument access_code_caption_delete;
@@ -250,13 +232,11 @@ bool TLGManager::sendSettingsPanel(bool edit, std::string chat_id){
     access_code_caption_delete["callback_data"] = "delete_code";
     inline_row_4.add(access_code_caption_delete);
 
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
     return responce["ok"].as<bool>();
 }
-
 
 bool TLGManager::sendControlPanel(bool edit, std::string chat_id){
     std::string welcome = "Управление";
@@ -308,7 +288,6 @@ bool TLGManager::sendControlPanel(bool edit, std::string chat_id){
     reject_select["callback_data"] = "reject";
     inline_row_3.add(reject_select);
 
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -319,7 +298,6 @@ bool TLGManager::answerCallbackQuery(std::string callback_query_id) {
     JsonDocument json;
     json["method"] = "answerCallbackQuery";
     json["callback_query_id"] = callback_query_id.c_str();
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -388,7 +366,6 @@ void TLGManager::getUpdate() {
     json["method"] = "getUpdates";
     json["timeout"] = 60;
     json["offset"] = update_id + 1;
-    std::string request;   
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
@@ -401,21 +378,14 @@ void TLGManager::getUpdate() {
             update_id = result["update_id"].as<uint64_t>();
             if (!result["message"].isNull()) {
                 JsonDocument msg = result["message"];
-                std::string from_id = msg["from"]["id"].as<std::string>();
-                std::string user_name = msg["from"]["username"].as<std::string>();
-                std::string chat_id = msg["chat"]["id"].as<std::string>();
-                std::string text = msg["text"].as<std::string>();
-                message(from_id, chat_id, text, user_name);
+                message(msg["from"]["id"].as<std::string>(), msg["chat"]["id"].as<std::string>(), msg["text"].as<std::string>(), msg["from"]["username"].as<std::string>());
             }
             if (!result["callback_query"].isNull()) {
                 JsonDocument query = result["callback_query"];
                 std::string id = query["id"].as<std::string>();
-                std::string from_id = query["from"]["id"].as<std::string>();
-                std::string chat_id = query["message"]["chat"]["id"].as<std::string>();
-                std::string data = query["data"].as<std::string>();
                 menu_id = query["message"]["message_id"].as<uint64_t>();
                 uint8_t repeat = 3;
-                callback_query(from_id, chat_id, data);
+                callback_query(query["from"]["id"].as<std::string>(), query["message"]["chat"]["id"].as<std::string>(), query["data"].as<std::string>());
                 while (!answerCallbackQuery(id) && repeat--){};
             }
         }

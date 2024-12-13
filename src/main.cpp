@@ -1,24 +1,3 @@
-#define led_status    GPIO_NUM_16        // Индикатор статуса API
-#define led_indicator GPIO_NUM_13        // Дополнительный индикатор, который будет показывать режимы и прочее.
-#define detect_line   GPIO_NUM_12        // Пин детектора вызова
-#define button_boot   GPIO_NUM_0         // Кнопка управления платой и перевода в режим прошивки
-#define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
-#define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
-#define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
-#define ACCEPT_FILENAME "/media/access_allowed.mp3"
-#define GREETING_FILENAME "/media/greeting_allowed.mp3"
-#define REJECT_FILENAME "/media/access_denied.mp3"
-#define DELIVERY_FILENAME "/media/delivery_allowed.mp3"
-#define SETTING_FILENAME "/settings.json"
-#define INDEX_FILENAME "/index.html"
-#define l_status_call "Вызов"
-#define l_status_answer "Ответ"
-#define l_status_open "Открытие двери"
-#define l_status_reject "Сброс вызова"
-#define l_status_close "Закрыто"
-#define STACK_SIZE 8192
-#define CRITICAL_FREE 65536
-
 #include <ESPAsyncWebserver.h>
 #include <Update.h>
 #include "FTPServer.h"
@@ -36,48 +15,21 @@
 #include "sensor.h"
 #include "binary_sensor.h"
 
-#if defined(ESP32) && !defined(USE_ESP32_VARIANT_ESP32C3)
-    #include "AudioOutputI2S.h"
-    using aAudioOutput = AudioOutputI2S;
-    #define _AudioOutput() aAudioOutput(0, aAudioOutput::INTERNAL_DAC)
-#else
-    #include "AudioOutputI2SNoDAC.h"
-    using aAudioOutput = AudioOutputI2SNoDAC;
-    #define _AudioOutput() aAudioOutput()
-#endif
-#if defined(SDCARD)
-    #include "SD.h"
-    #include "AudioFileSourceSD.h"
-    #define aFS SD
-    #define aFS_STR "SD"
-    using aAudioFileSource = AudioFileSourceSD;
-#else
-    #include "LittleFS.h"
-    #include "AudioFileSourceLittleFS.h"
-    #define aFS LittleFS
-    #define aFS_STR "LittleFS"
-    using aAudioFileSource = AudioFileSourceLittleFS;
-#endif
 #include "AudioGeneratorMP3.h"
+#include "AudioOutputI2S.h"
+#include "LittleFS.h"
+#include "AudioFileSourceLittleFS.h"
+#define aFS LittleFS
+#define aFS_STR "LittleFS"
 
 static const char* TAG = "MAIN";
 std::string mode_name[3] = {"Не активен","Сброс вызова","Открывать всегда"}; 
-std::string modes_name = "Постоянный режим работы";
-std::string sound_name = "Аудиосообщения";
-std::string led_name = "Светоиндикация";
-std::string mute_name = "Беззвучный режим";
-std::string phone_disable_name = "Отключить трубку";
-std::string accept_call_name = "Открыть дверь";
-std::string reject_call_name = "Сбросить вызов";
-std::string delivery_call_name = "Открыть курьеру";
-std::string access_code_name = "Код открытия: ";
-std::string access_code_delete_name = "Удалить код";
 enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
 uint8_t currentAction = WAIT;
 uint32_t detectMillis = 0;
 uint32_t audioLength = 0;
 
-aAudioOutput *audioOut = new _AudioOutput();
+AudioOutputI2S *audioOut = new AudioOutputI2S(0, AudioOutputI2S::INTERNAL_DAC);
 AudioGeneratorMP3 *audioPlayer;
 AudioFileSource *audioFile;
 
@@ -211,7 +163,6 @@ std::string getMediaExists() {
   json["greeting_allowed_play"] = aFS.exists(GREETING_FILENAME)?GREETING_FILENAME:NULL;
   json["delivery_allowed_play"] = aFS.exists(DELIVERY_FILENAME)?DELIVERY_FILENAME:NULL;
   json["access_denied_play"] =    aFS.exists(REJECT_FILENAME)?REJECT_FILENAME:NULL;
-
   std::string message;
   serializeJson(json, message);
   Serial.printf("[%s] %s\n", TAG, message.c_str());
@@ -242,42 +193,22 @@ std::string getStatus(){
 5 - Не удалось подключиться к серверу взаимодействия
 6 - Не удалось проинициализировать файловую систему. Критичная ошибка.
 */
+uint8_t max(uint8_t a, uint8_t b) { return a>b?a:b; }
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 void IRAM_ATTR TimerHandler0() {
   portENTER_CRITICAL_ISR(&timerMux);
-  if (hw_status.last_error) {
-    if (ledErrorCounter++ < hw_status.last_error * 10) {
-      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
-      ledcWrite(0, (ledErrorCounter%10 < 5)?40:1);
-    }
-    if (ledErrorCounter>160) ledErrorCounter = 0;
-  } else if (settings_manager && settings_manager->last_error) {
-    if (ledErrorCounter++ < settings_manager->last_error * 10) {
-      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
-      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
-    }
-    if (ledErrorCounter>160) ledErrorCounter = 0;
-  } else if (wifi_manager && wifi_manager->last_error) {
-    if (ledErrorCounter++ < wifi_manager->last_error * 10) {
-      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
-      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
-    }
-    if (ledErrorCounter>160) ledErrorCounter = 0;
-  } else if (mqtt_manager && mqtt_manager->last_error) {
-    if (ledErrorCounter++ < mqtt_manager->last_error * 10) {
-      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
-      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
-    }
-    if (ledErrorCounter>160) ledErrorCounter = 0;
-  } else if (tlg_manager && tlg_manager->last_error) {
-    if (ledErrorCounter++ < tlg_manager->last_error * 10) {
-      gpio_set_level(led_status, (ledErrorCounter%10 < 5)?1:0);
-      ledcWrite(0, (ledErrorCounter%10 < 5)?40:0);
+  uint8_t error = max(hw_status.last_error,
+                  max(settings_manager?settings_manager->last_error:0,
+                  max(wifi_manager?wifi_manager->last_error:0,
+                  max(mqtt_manager?mqtt_manager->last_error:0, tlg_manager?tlg_manager->last_error:0)))) << 4;
+  if (error) {
+    if (ledErrorCounter++ < error) {
+        gpio_set_level(led_status, (ledErrorCounter%16 < 8)?1:0);
+        ledcWrite(0, (ledErrorCounter%16 < 8)?60:0);
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else {
     if (settings_manager && settings_manager->settings.led) {
-
       if (settings_manager->settings.reject_call) {
           switch (ledStatusCounter++) {
               case 0: gpio_set_level(led_status, 1); break;
@@ -286,7 +217,6 @@ void IRAM_ATTR TimerHandler0() {
               default: if (ledStatusCounter > 40) ledStatusCounter = 0;
           }
       } else gpio_set_level(led_status, 0);
-
       if (currentAction != WAIT) {
         switch (ledIndicatorCounter++) {
             case 0: ledcWrite(0, 240); break;
@@ -315,7 +245,6 @@ void IRAM_ATTR TimerHandler0() {
   }
   portEXIT_CRITICAL_ISR(&timerMux);
 }
-
 
 uint64_t reset_time = 0;
 void calling_detect() {
@@ -354,6 +283,24 @@ void phone_disable_action () {
     }
 }
 
+bool initAudio(const char * filename) {
+  audioFile = new AudioFileSourceLittleFS(filename);
+   if (audioFile) {
+      audioPlayer = new AudioGeneratorMP3();
+      audioPlayer->begin(audioFile, audioOut);
+      audioLength = millis();
+      return true;
+   }
+   return false;
+}
+
+void deleteAudio(){
+  audioPlayer->stop();
+  audioLength = millis() - audioLength;
+  delete audioPlayer; audioPlayer = nullptr;
+  delete audioFile; audioFile = nullptr;
+}
+
 uint64_t timerAction = 0;
 void doAction(uint32_t timer) {
   switch (currentAction) {
@@ -372,8 +319,7 @@ void doAction(uint32_t timer) {
                           detectMillis = millis(); 
                           timerAction += settings_manager->settings.delay_before;       
                         }    
-                  }
-                  break;
+                  } break;
     case CALL:  if (timer > timerAction) {
                   gpio_set_level(switch_phone, 0);  
                   gpio_set_level(relay_line, 1);
@@ -383,14 +329,11 @@ void doAction(uint32_t timer) {
                 } break;
     case SWUP:  if (timer > timerAction) {
                   if (settings_manager->settings.sound || settings_manager->settings.delivery) {
-                      audioFile = new aAudioFileSource(settings_manager->settings.delivery ? DELIVERY_FILENAME : 
-                                                            settings_manager->settings.accept_call ? ACCEPT_FILENAME :
-                                                            settings_manager->settings.reject_call ? REJECT_FILENAME :
-                                                            settings_manager->settings.modes == 2 ? ACCEPT_FILENAME : REJECT_FILENAME);
-                    if (audioFile) {
-                      audioPlayer = new AudioGeneratorMP3();
-                      audioPlayer->begin(audioFile, audioOut);
-                      audioLength = millis();
+                      
+                    if (initAudio(settings_manager->settings.delivery ? DELIVERY_FILENAME : 
+                                  settings_manager->settings.accept_call ? ACCEPT_FILENAME :
+                                  settings_manager->settings.reject_call ? REJECT_FILENAME :
+                                  settings_manager->settings.modes == 2 ? ACCEPT_FILENAME : REJECT_FILENAME)) {
                       currentAction = VOICE;
                       break;
                     }
@@ -402,10 +345,7 @@ void doAction(uint32_t timer) {
                   if (currentAction == PREOPEN) timerAction += settings_manager->settings.delay_before;
                 } break;
     case VOICE: if (!audioPlayer->loop()) {
-                  audioPlayer->stop();
-                  audioLength = millis() - audioLength;
-                  delete audioPlayer; audioPlayer = nullptr;
-                  delete audioFile; audioFile = nullptr;
+                  deleteAudio();
                   currentAction = ( settings_manager->settings.delivery || 
                                     settings_manager->settings.accept_call || 
                                     (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? SWOPEN : DROP;
@@ -419,12 +359,8 @@ void doAction(uint32_t timer) {
                   break;
     case GREETING: if (timer > timerAction) {
                     if (settings_manager->settings.sound) {
-                      audioFile = new aAudioFileSource(GREETING_FILENAME);
-                      if (audioFile) {
+                      if (initAudio(GREETING_FILENAME)) {
                         setLineStatus(l_status_answer);
-                        audioPlayer = new AudioGeneratorMP3();
-                        audioPlayer->begin(audioFile, audioOut);
-                        audioLength = millis();
                         currentAction = GREETING_VOICE;
                         gpio_set_level(switch_open, 0);
                         timerAction += settings_manager->settings.greeting_delay;
@@ -433,18 +369,13 @@ void doAction(uint32_t timer) {
                     }
                     currentAction = DROP;
                   } break;
-    case GREETING_VOICE: 
-                if (timer > timerAction) {
+    case GREETING_VOICE: if (timer > timerAction) {
                   if (!audioPlayer->loop()) {
-                    audioPlayer->stop();
-                    audioLength = millis() - audioLength;
-                    delete audioPlayer; audioPlayer = nullptr;
-                    delete audioFile; audioFile = nullptr;
+                    deleteAudio();
                     timerAction += audioLength;
                     currentAction = DROP;
                   }
-                }
-                break;
+                } break;
     case DROP:  if (timer > timerAction) {
                   gpio_set_level(switch_open, 0);
                   gpio_set_level(switch_phone, 1); 
@@ -584,7 +515,7 @@ void tlg_message(std::string from_id, std::string chat_id, std::string message, 
       } else {
           if (message == "✅ Открой дверь") {setAccept(true); tlg_manager->sendMessage(chat_id, "Открываю дверь.");}
           else {
-            tlg_manager->sendMessage(settings_manager->settings.tlg_user, "❗️Cообщение от пользователя @" + user_name + "\nТекст:\n" + message);
+            tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✉️Cообщение от пользователя @" + user_name + " :\n" + message);
             tlg_manager->sendMessage(chat_id, "Ваше сообщение отправлено Администратору.");
           }
       }
@@ -688,7 +619,6 @@ void entity_delete() {
   delete(line_status);line_status = nullptr;
   delete(modes);modes = nullptr;
 }
-
 
 TaskHandle_t getTLGUpdateTask;
 void getTLGUpdate(void * pvParameters) {
@@ -1054,39 +984,32 @@ void setup() {
   /* Hardware setup */
   gpio_reset_pin(led_status);
   gpio_set_direction(led_status, GPIO_MODE_OUTPUT);
-  gpio_set_drive_capability(led_status, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(led_status, GPIO_FLOATING);
 
   gpio_reset_pin(led_indicator);
   gpio_set_direction(led_indicator, GPIO_MODE_OUTPUT);
-  gpio_set_drive_capability(led_indicator, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(led_indicator, GPIO_FLOATING);
   ledcSetup(0, 500, 8);
   ledcAttachPin(led_indicator, 0);
 
   gpio_reset_pin(detect_line);
   gpio_set_direction(detect_line, GPIO_MODE_INPUT);
-  gpio_set_drive_capability(detect_line, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(detect_line, GPIO_PULLUP_ONLY);
 
   gpio_reset_pin(button_boot);
   gpio_set_direction(button_boot, GPIO_MODE_INPUT);
-  gpio_set_drive_capability(button_boot, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(button_boot, GPIO_FLOATING);
 
   gpio_reset_pin(relay_line);
   gpio_set_direction(relay_line, GPIO_MODE_OUTPUT);
-  gpio_set_drive_capability(relay_line, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(relay_line, GPIO_FLOATING);
 
   gpio_reset_pin(switch_open);
   gpio_set_direction(switch_open, GPIO_MODE_OUTPUT);
-  gpio_set_drive_capability(switch_open, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(switch_open, GPIO_FLOATING);
 
   gpio_reset_pin(switch_phone);
   gpio_set_direction(switch_phone, GPIO_MODE_OUTPUT);
-  gpio_set_drive_capability(switch_phone, GPIO_DRIVE_CAP_0);
   gpio_set_pull_mode(switch_phone, GPIO_FLOATING);
 
   pcnt_config_t pcnt_config = {
@@ -1131,15 +1054,12 @@ void setup() {
   settings_manager = new SettingsManager(SETTING_FILENAME);
   settings_manager->LoadSettings(aFS);
   if (currentAction == WAIT) gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable); 
-
   Serial.printf("[%s] %s\n", TAG, "WiFi init");
   wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
   if (!hw_status.web_services_init) web_server_init();
   Serial.printf("[%s] %s\n", TAG, "Web services init complete");
-
   xTaskCreatePinnedToCore(wifi_loop, "WiFi infinity loops", STACK_SIZE, NULL, tskIDLE_PRIORITY,  &wifiTask, tskNO_AFFINITY);
   Serial.printf("[%s] %s\n", TAG, "WiFi monitor started");
-
   device_info = new DevInfo;
   device_info->name = CONFIG_CHIP_DEVICE_PRODUCT_NAME;
   device_info->manufacturer = "SCratORS";
@@ -1152,7 +1072,6 @@ void setup() {
   Serial.printf("[%s] MQTT ID: %s\n", TAG, txt.c_str());
   device_info->mqtt_entity_id = txt;
   device_info->dev_name = "smartintercom";
-
   Serial.printf("[%s] %s\n", TAG, "System started.");
 }
 
@@ -1205,6 +1124,4 @@ if (!settings_manager->settings.child_lock) {
         last_toggle = millis();
     }
   }
-
 }
-

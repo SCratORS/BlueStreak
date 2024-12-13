@@ -1,7 +1,37 @@
 #pragma once
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.1.5-Web Insider Preview 11.2024 Firmware"
+#define led_status    GPIO_NUM_16        // Индикатор статуса API
+#define led_indicator GPIO_NUM_13        // Дополнительный индикатор, который будет показывать режимы и прочее.
+#define detect_line   GPIO_NUM_12        // Пин детектора вызова
+#define button_boot   GPIO_NUM_0         // Кнопка управления платой и перевода в режим прошивки
+#define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
+#define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
+#define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.1.6-Web Insider Preview 12.2024 Firmware"
 #define COPYRIGHT "© SCHome (SmartHome Devices), 2024"
+#define modes_name "Постоянный режим работы"
+#define sound_name "Аудиосообщения"
+#define led_name "Светоиндикация"
+#define mute_name "Беззвучный режим"
+#define phone_disable_name "Отключить трубку"
+#define accept_call_name "Открыть дверь"
+#define reject_call_name "Сбросить вызов"
+#define delivery_call_name "Открыть курьеру"
+#define access_code_name "Код открытия: "
+#define access_code_delete_name "Удалить код"
+#define ACCEPT_FILENAME "/media/access_allowed.mp3"
+#define GREETING_FILENAME "/media/greeting_allowed.mp3"
+#define REJECT_FILENAME "/media/access_denied.mp3"
+#define DELIVERY_FILENAME "/media/delivery_allowed.mp3"
+#define SETTING_FILENAME "/settings.json"
+#define INDEX_FILENAME "/index.html"
+#define l_status_call "Вызов"
+#define l_status_answer "Ответ"
+#define l_status_open "Открытие двери"
+#define l_status_reject "Сброс вызова"
+#define l_status_close "Закрыто"
 #define DISCOVERY_DELAY 500
+#define STACK_SIZE 16384
+#define CRITICAL_FREE 65536
 
 #include "stdint.h"
 #include <string>
@@ -89,4 +119,5 @@ class SettingsManager {
 
     private:
         std::string filename;
+        std::string message;
 };

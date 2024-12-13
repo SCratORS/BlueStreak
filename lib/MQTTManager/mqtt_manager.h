@@ -10,7 +10,6 @@ class MQTTManager {
         ~MQTTManager();
         void device_discovery();
         void device_online();
-        void device_offline();
         void handle();
         void setClientID(std::string value) {this->client_id = value;}
         void mqtt_loop();
