@@ -2,7 +2,7 @@
 
 ![](https://github.com/SCratORS/BlueStreak/blob/main/images/bs.png)
 
-Прошивка для устройств [SmartIntercom Nelma](https://github.com/SCratORS/SmartIntercom). 
+Прошивка для устройств управления абнентской линией домфона.
 
 Поддерживается управление через WEBUI, WebSoket, а также MQTT или нативным Telegram без сторонних серверов и облаков.
 
