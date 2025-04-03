@@ -5,7 +5,7 @@
 
 class TLGManager {
     public:
-        TLGManager();
+        TLGManager(HTTPClient * https_client, HTTPClient * https_client_post);
         ~TLGManager();
         bool begin();
         void setToken(std::string token) { this->host = "https://api.telegram.org/bot" + token + "/"; }
@@ -28,14 +28,17 @@ class TLGManager {
         SettingsManager * settings_manager;
         void addPublicChatId(std::string);
         bool deletePublicAccess(std::string chat_id = "");
+        bool await() {return _await;}
         std::string public_chat_id;
     private:
         HTTPClient * https_client;
         HTTPClient * https_client_post;
         std::string host;
         std::string request;
+        JsonDocument json;
         bool tlg_started = false;
         bool update_loop = false;
+        bool _await = false;
         uint64_t update_id = 0;
         bool getMe();
         bool setMyCommands();

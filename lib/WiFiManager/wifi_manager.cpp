@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 
 static const char* TAG = "WIFI";
+extern void LOG(const char * format, ...);
 
 WiFiManager::WiFiManager(std::string ssid, std::string passwd) {
     this->ssid = ssid;
@@ -19,7 +20,7 @@ void WiFiManager::setSSID(std::string ssid) {
 
 void WiFiManager::disconnect() {
     WiFi.disconnect();
-    Serial.printf("[%s] Disconnect from SSID: %s\n", TAG, ssid);
+    LOG("[%s] Disconnect from SSID: %s\n", TAG, ssid);
 };
 
 void WiFiManager::handle()   {
@@ -31,18 +32,18 @@ void WiFiManager::handle()   {
                 last_error = 1;
             }
             WiFi.disconnect();
-            Serial.printf("[%s] Connecting to SSID: %s\n", TAG, ssid.c_str());
+            LOG("[%s] Connecting to SSID: %s\n", TAG, ssid.c_str());
             WiFi.begin(ssid.c_str(), passwd.c_str());
             timer = millis();
             status.connecting_wifi = true;
         } else { //Подключение запущено
             if (millis() - timer > 15000) { // Ждем 15 секунд
-                Serial.printf("[%s] Connecting to SSID failure\n", TAG);
+                LOG("[%s] Connecting to SSID failure\n", TAG);
                 if (!status.start_ap) {
                     //Поднимаем свою AP
                     ip = WiFi.softAPIP().toString().c_str();
-                    Serial.printf("[%s] Activate software Wi-Fi AccessPoint: %s\n", TAG, CONFIG_CHIP_DEVICE_PRODUCT_NAME);
-                    Serial.printf("[%s] Use IP address for access to web ui: http://%s\n", TAG, ip.c_str());
+                    LOG("[%s] Activate software Wi-Fi AccessPoint: %s\n", TAG, CONFIG_CHIP_DEVICE_PRODUCT_NAME);
+                    LOG("[%s] Use IP address for access to web ui: http://%s\n", TAG, ip.c_str());
                     WiFi.mode(WIFI_AP_STA);
                     WiFi.softAP(CONFIG_CHIP_DEVICE_PRODUCT_NAME, NULL);
                     dnsServer.start(53, "*", WiFi.softAPIP());
@@ -55,7 +56,7 @@ void WiFiManager::handle()   {
     } else {
         if (status.start_ap) {
             if (!WiFi.softAPgetStationNum()) {
-                Serial.printf("[%s] Disable software Wi-Fi AccessPoint\n", TAG);
+                LOG("[%s] Disable software Wi-Fi AccessPoint\n", TAG);
                 WiFi.mode(WIFI_STA);
                 dnsServer.stop();
                 status.start_ap = false;
@@ -64,7 +65,7 @@ void WiFiManager::handle()   {
         ip = WiFi.localIP().toString().c_str();
         last_error = 0;
         if (status.connecting_wifi) {
-            Serial.printf("[%s] Conneting to Wi-Fi network successful. IP address: %s\n", TAG, ip.c_str());
+            LOG("[%s] Conneting to Wi-Fi network successful. IP address: %s\n", TAG, ip.c_str());
             status.connecting_wifi = false;
         }
     }

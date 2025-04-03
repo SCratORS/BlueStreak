@@ -6,8 +6,8 @@
 #define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
 #define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
 #define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.1.6-Web Insider Preview 12.2024 Firmware"
-#define COPYRIGHT "© SCHome (SmartHome Devices), 2024"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.1.9-Web Insider Preview 04.2025 Firmware"
+#define COPYRIGHT "© SCHome (SmartHome Devices), 2025"
 #define modes_name "Постоянный режим работы"
 #define sound_name "Аудиосообщения"
 #define led_name "Светоиндикация"
@@ -18,10 +18,10 @@
 #define delivery_call_name "Открыть курьеру"
 #define access_code_name "Код открытия: "
 #define access_code_delete_name "Удалить код"
-#define ACCEPT_FILENAME "/media/access_allowed.mp3"
-#define GREETING_FILENAME "/media/greeting_allowed.mp3"
-#define REJECT_FILENAME "/media/access_denied.mp3"
-#define DELIVERY_FILENAME "/media/delivery_allowed.mp3"
+#define ACCEPT_FILENAME "/media/access_allowed"
+#define GREETING_FILENAME "/media/greeting_allowed"
+#define REJECT_FILENAME "/media/access_denied"
+#define DELIVERY_FILENAME "/media/delivery_allowed"
 #define SETTING_FILENAME "/settings.json"
 #define INDEX_FILENAME "/index.html"
 #define l_status_call "Вызов"
@@ -36,6 +36,7 @@
 #include "stdint.h"
 #include <string>
 #include <FS.h>
+#include <ArduinoJson.h>
 
 class SettingsManager {
     public:
@@ -57,8 +58,13 @@ class SettingsManager {
             bool mute = false;
             bool phone_disable = false;
             bool ftp = false;
+            bool syslog = false;
+            bool force_open = false;
+            uint16_t syslog_port = 514;
+            std::string syslog_server = "";
             uint8_t modes = 0;
             uint8_t server_type = 0;
+            uint16_t delay_system = 500;
             uint16_t delay_before = 1000;
             uint16_t delay_open = 600;
             uint16_t delay_after = 3000;
@@ -95,6 +101,7 @@ class SettingsManager {
         std::string setDelayFilter(uint16_t value);
         std::string setCodeLifeTime(uint16_t value);
         std::string setGreetingDelay(uint16_t value);
+        std::string setDelaySystem(uint16_t value);
         std::string setLed(bool value);
         std::string setSound(bool value);
         std::string setMute(bool value);
@@ -116,8 +123,13 @@ class SettingsManager {
         std::string setUserLogin(std::string value);
         std::string setUserPassword(std::string value);
         std::string setAddressCounter(uint8_t value);
+        std::string setSysLog(bool value);
+        std::string setSysLogPort(uint16_t value);
+        std::string setSysLogServer(std::string value);
+        std::string setForceOpen(bool value);
 
     private:
+        JsonDocument json;
         std::string filename;
         std::string message;
 };

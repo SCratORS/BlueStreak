@@ -3,10 +3,11 @@
 
 static const char * TAG = "TLG";
 extern std::string mode_name[3];
+extern void LOG(const char * format, ...);
 
-TLGManager::TLGManager(){
-    https_client = new HTTPClient();
-    https_client_post = new HTTPClient();
+TLGManager::TLGManager(HTTPClient * https_client, HTTPClient * https_client_post){
+    this->https_client = https_client;
+    this->https_client_post = https_client_post;
     tlg_started = false;
     host = "";
     menu_id = 0;
@@ -14,58 +15,45 @@ TLGManager::TLGManager(){
 }
 
 TLGManager::~TLGManager() {
-    if (https_client) delete(https_client); 
-    if (https_client_post) delete(https_client_post);
-    https_client = nullptr;
-    https_client_post = nullptr;          
 }
 
 void TLGManager::stop() {
     update_loop = false;
-    if (https_client) {
-        https_client->setReuse(false);
-        https_client->end();
-    }
-    if (https_client_post) {
-        https_client_post->setReuse(false);
-        https_client_post->end();
-    }
+    https_client->setReuse(false);
+    https_client->end();
+    https_client_post->setReuse(false);
+    https_client_post->end();
     tlg_started = false;
 } 
 
 std::string TLGManager::post(std::string content, bool force) {
-    std::string responce = "";
-    if (force && !https_client_post) force = false;
+    std::string responce = "{}";
     if (force) {   
         update_loop = false;
-        Serial.printf("[%s] request force post: %s\n", TAG, content.c_str());
-        if (https_client_post) {
-            https_client_post->POST(content.c_str());
-            responce = https_client_post->getString().c_str();
-        }
+        LOG("[%s] request force post: %s\n", TAG, content.c_str());
+        https_client_post->POST(content.c_str());
+        responce = https_client_post->getString().c_str();
     } else {
-        Serial.printf("[%s] request post: %s\n", TAG, content.c_str());
-        if (https_client) {
-            https_client->POST(content.c_str());
-            responce = https_client->getString().c_str();
-        }
+        LOG("[%s] request post: %s\n", TAG, content.c_str());
+        https_client->POST(content.c_str());
+        responce = https_client->getString().c_str();
     }
-    Serial.printf("[%s] post responce: %s\n", TAG, responce.c_str());
+    LOG("[%s] post responce: %s\n", TAG, responce.c_str());
     if (force) update_loop = tlg_started;
     return responce;
 }
 
 bool TLGManager::getMe() {
-    JsonDocument json;
+    json.clear();
     json["method"] = "getMe";
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::setMyCommands() {
-    JsonDocument json;
+    json.clear();
     json["method"] = "setMyCommands";
     JsonArray commands = json["commands"].to<JsonArray>();
     JsonDocument cmd_control;
@@ -79,12 +67,12 @@ bool TLGManager::setMyCommands() {
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();   
+    return (responce!="") && (responce["ok"].as<bool>());   
 }
 
 bool TLGManager::sendStartMessage(std::string chat_id) {
     std::string welcome = "SmartIntercom: Телеграм-бот.\nПрошивка: "+std::string(CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION)+"\nПоддержка устройства: https://t.me/smartintercom";
-    JsonDocument json;
+    json.clear();
     json["method"] = "sendMessage";
     json["chat_id"] = chat_id.c_str();
     json["text"] = welcome.c_str();
@@ -98,12 +86,12 @@ bool TLGManager::sendStartMessage(std::string chat_id) {
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::deletePublicAccess(std::string chat_id){
     if (public_chat_id == "" && chat_id == "") return true;
-    JsonDocument json;
+    json.clear();
     json["method"] = "sendMessage";
     json["chat_id"] = chat_id == ""?public_chat_id.c_str():chat_id.c_str();
     json["text"] = chat_id==""?"⚠️ Срок действия кода завершён.":"⛔️ Доступ запрещён.";
@@ -113,7 +101,7 @@ bool TLGManager::deletePublicAccess(std::string chat_id){
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request, true).c_str());
     public_chat_id = "";
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 void TLGManager::addPublicChatId(std::string chat_id) {
@@ -122,7 +110,7 @@ void TLGManager::addPublicChatId(std::string chat_id) {
 }
 
 bool TLGManager::sendOpenKeyboard(std::string chat_id, std::string message) {
-    JsonDocument json;
+    json.clear();
     json["method"] = "sendMessage";
     json["chat_id"] = chat_id.c_str();
     json["text"] = message.c_str();
@@ -134,12 +122,12 @@ bool TLGManager::sendOpenKeyboard(std::string chat_id, std::string message) {
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::sendModeKeyboard(bool edit, std::string chat_id) {
     std::string welcome = "Выбор постоянного режима работы:";
-    JsonDocument json;
+    json.clear();
     json["method"] = edit?"editMessageText":"sendMessage";
     if (edit) json["message_id"] = menu_id;
     json["chat_id"] = chat_id.c_str();
@@ -168,13 +156,13 @@ bool TLGManager::sendModeKeyboard(bool edit, std::string chat_id) {
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
  }
 
 
 bool TLGManager::sendSettingsPanel(bool edit, std::string chat_id){
     std::string welcome = "Настройки";
-    JsonDocument json;
+    json.clear();
     json["method"] = edit?"editMessageText":"sendMessage";
     if (edit) json["message_id"] = menu_id;
     json["chat_id"] = chat_id.c_str();
@@ -235,12 +223,12 @@ bool TLGManager::sendSettingsPanel(bool edit, std::string chat_id){
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::sendControlPanel(bool edit, std::string chat_id){
     std::string welcome = "Управление";
-    JsonDocument json;
+    json.clear();
     json["method"] = edit?"editMessageText":"sendMessage";
     if (edit) json["message_id"] = menu_id;
     json["chat_id"] = chat_id.c_str();
@@ -291,17 +279,17 @@ bool TLGManager::sendControlPanel(bool edit, std::string chat_id){
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::answerCallbackQuery(std::string callback_query_id) {
-    JsonDocument json;
+    json.clear();
     json["method"] = "answerCallbackQuery";
     json["callback_query_id"] = callback_query_id.c_str();
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    return responce["ok"].as<bool>();
+    return (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::sendMessage(std::string chat_id, std::string message, bool force, std::string mode) {
@@ -313,7 +301,7 @@ bool TLGManager::sendMessage(std::string chat_id, std::string message, bool forc
         item_id.erase(std::remove(item_id.begin(), item_id.end(), ' '), item_id.end());
         start = end + 1;
         end = chat_id.find(",", start);
-        JsonDocument json;
+        json.clear();
         json["method"] = "sendMessage";
         json["chat_id"] = item_id.c_str();
         json["text"] = message.c_str();
@@ -322,11 +310,11 @@ bool TLGManager::sendMessage(std::string chat_id, std::string message, bool forc
         serializeJson(json, request);
         JsonDocument responce;
         deserializeJson(responce, (char*)post(request, force).c_str());
-        result = responce["ok"].as<bool>();
+        result = (responce!="") && (responce["ok"].as<bool>());
     }
     std::string item_id = chat_id.substr(start, end - start);
     item_id.erase(std::remove(item_id.begin(), item_id.end(), ' '), item_id.end());
-    JsonDocument json;
+    json.clear();
     json["method"] = "sendMessage";
     json["chat_id"] = item_id.c_str();
     json["text"] = message.c_str();
@@ -335,41 +323,46 @@ bool TLGManager::sendMessage(std::string chat_id, std::string message, bool forc
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request, force).c_str());
-    return result && responce["ok"].as<bool>();
+    return result && (responce!="") && (responce["ok"].as<bool>());
 }
 
 bool TLGManager::begin() {
     tlg_started = false;
-    if (https_client && https_client->begin(host.c_str())) {
+    last_error = 0;
+    if (https_client->begin(host.c_str())) {
         https_client->setTimeout(65000);
         https_client->addHeader("Content-Type", "application/json");
         tlg_started = getMe() && setMyCommands();
         if (https_client_post->begin(host.c_str())) { // Пробуем запустить еще один клиент для телеграмм-оповещений.
             https_client_post->addHeader("Content-Type", "application/json");
         } else {  // Если не получилось, то удаляем его нафиг, будем одним работать. Оповещения будут приходить после завершения LongPool update.
-            delete(https_client_post); https_client_post = nullptr;
+            tlg_started = false;
+            LOG("[%s] Second connection filed!\n", TAG);
+            last_error = 5;
         }
     } else {
-        Serial.printf("[%s] Connection filed!\n", TAG);
+        LOG("[%s] Connection filed!\n", TAG);
         last_error = 5;
     }
     if (!tlg_started) {
-        Serial.printf("[%s] Telegram authorization failed!\n", TAG);
+        LOG("[%s] Telegram authorization failed!\n", TAG);
         last_error = 5;
     } else update_loop = true;
     return tlg_started;
 }
 
+
 void TLGManager::getUpdate() {
     if (!update_loop) return;
-    JsonDocument json;
+    _await = true;
+    json.clear();
     json["method"] = "getUpdates";
     json["timeout"] = 60;
     json["offset"] = update_id + 1;
     serializeJson(json, request);
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request).c_str());
-    if (responce["ok"].as<bool>()) {
+    if ((responce!="") && (responce["ok"].as<bool>())) {
         last_error = 0;
         JsonDocument results = responce["result"];
         uint8_t result_count = results.size();
@@ -390,5 +383,5 @@ void TLGManager::getUpdate() {
             }
         }
     } else last_error = 5;
-
+    _await = false;
 }

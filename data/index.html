@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <title>SmartIntercom Nelma</title>
+  <title>SmartIntercom Device</title>
   <link rel="icon" type="image/png" href="images/favicon_32x32.png">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,7 +11,7 @@
 <body>
   <div class = "bkg-panel">
     <div class = "panel top no-padding-bottom text-center">
-      <div class = "text title">SmartIntercom Nelma</div>
+      <div class = "text title">SmartIntercom Device</div>
       <div class = "text sub-title" id="firmware">
         <div id="value"></div>
       </div>
@@ -31,22 +31,22 @@
               <option value="1">Сброс вызова</option>
               <option value="2">Открывать всегда</option>
             </select>
-            <div class="text sub-title combobox-title">Режим работы:</div>
+            <div class="text sub-title combobox-title">Постоянный режим работы:</div>
           </div>
       </div>
 
-      <div class = "panel top control add-margin">
+      <div class = "panel top control add-margin no-padding-bottom">
           <div class = "icon icon_door-open"></div>
-          <div class = "text">Открыть дверь</div>
+          <div class = "text">Открыть дверь<div class = "text sub-title">Однократный режим открытия двери на вызов</div></div>
           <label class="switch">
             <input id="accept_call" type="checkbox" title="accept_call" placeholder="" onclick="sendCommand('setAccept',this.checked)">
             <span class="slider round"></span>
           </label>
       </div>
 
-      <div class = "panel top control add-margin">
+      <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_package"></div>
-        <div class = "text">Открыть курьеру</div>
+        <div class = "text">Открыть курьеру<div class = "text sub-title">Воспроизведение отдельного аудиофайла</div></div>
         <label class="switch">
           <input id="delivery" type="checkbox" title="delivery" placeholder="" onclick="sendCommand('setDelivery',this.checked)">
           <span class="slider round"></span>
@@ -54,7 +54,7 @@
       </div>
       <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_phone-hangup"></div>
-        <div class = "text">Сбросить вызов</div>
+        <div class = "text">Сбросить вызов<div class = "text sub-title">Однократный режим сброса входящего вызова</div></div>
         <label class="switch">
           <input id="reject_call" type="checkbox" title="reject_call" placeholder="" onclick="sendCommand('setReject',this.checked)">
           <span class="slider round"></span>
@@ -68,14 +68,14 @@
       <div class = "text caption">Сенсоры</div>
     </div>
     <div style="display:none;">
-      <div id="line_detect" class = "panel top control add-margin" type="binary">
+      <div id="line_detect" class = "panel top control add-margin no-padding-bottom" type="binary">
         <div id="icon" class = "icon icon_binary-off"></div>
-        <div class = "text">Детектор вызова</div>
+        <div class = "text">Детектор вызова<div class = "text sub-title">Сенсор определения входящего вызова</div></div>
         <div id="value" class = "text right">Выключено</div>
       </div>
       <div id="line_status" class = "panel top control add-margin no-padding-bottom">
         <div id="icon" class = "icon icon_bell"></div>
-        <div class = "text">Статус линии</div>
+        <div class = "text">Статус линии<div class = "text sub-title">Текущее действие устройства</div></div>
         <div id="value" class = "text right">Закрыто</div>
       </div>
     </div>
@@ -88,7 +88,7 @@
     <div style="display:none;">
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
-        <div class="text">Задержка перед ответом</div>
+        <div class="text">Задержка перед ответом<div class = "text sub-title">Пауза после снятия трубки</div></div>
         <div class="custom-input right" style="width: 25%;">
           <input id="delay_before" type="number" class="text right" title="delay_before" placeholder="" onchange="sendCommand('setDelayBeforeAnswer',this.value)">
           <div class="text right">мс.</div>   
@@ -96,7 +96,7 @@
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
-        <div class = "text">Время удержания двери</div>
+        <div class = "text">Время удержания двери<div class = "text sub-title">Время удержания кнопки окрытия двери</div></div>
         <div class="custom-input right" style="width: 25%;">
           <input id="delay_open" type="number" class="text right" title="delay_open" placeholder="" onchange="sendCommand('setDelayOpen',this.value)">
           <div class="text right">мс.</div>   
@@ -104,7 +104,7 @@
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
-        <div class = "text">Длительность звука открытия</div>
+        <div class = "text">Длинна звука открытия<div class = "text sub-title">Время, которое длится мелодия<br>открытия двери на блоке вызова</div></div>
         <div class="custom-input right" style="width: 25%;">
           <input id="greeting_delay" type="number" class="text right" title="greeting_delay" placeholder="" onchange="sendCommand('setGreetingDelay',this.value)">
           <div class="text right">мс.</div>   
@@ -112,7 +112,7 @@
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
-        <div class = "text">Задержка после сброса</div>
+        <div class = "text">Задержка после сброса<div class = "text sub-title">Время ожидания завершения сеанса<br>связи после окончания вызова</div></div>
         <div class="custom-input right" style="width: 25%;">
           <input id="delay_after" type="number" class="text right" title="delay_after" placeholder="" onchange="sendCommand('setDelayAfterClose',this.value)">
           <div class="text right">мс.</div>   
@@ -120,7 +120,7 @@
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
-        <div class="text">Игнорировать сигнал</div>
+        <div class="text">Игнорировать сигнал<div class = "text sub-title">Сигналы менее этого времени будут<br>игнорироваться</div></div>
         <div class="custom-input right" style="width: 25%;">
           <input id="delay_filter" type="number" class="text right" title="delay_filter" placeholder="" onchange="sendCommand('setDelayFilter',this.value)">
           <div class="text right">мс.</div>   
@@ -128,39 +128,54 @@
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_clock"></div>
-        <div class = "text">Длительность звонка</div>
+        <div class = "text">Длительность звонка<div class = "text sub-title">Время, которое длится мелодия звонка<br>и пауза на блоке вызова</div></div>
         <div class="custom-input right" style="width: 25%;">
           <input id="call_end_delay" type="number" class="text right" title="call_end_delay" placeholder="" onchange="sendCommand('setCallEndDelay',this.value)">
           <div class="text right">мс.</div>   
         </div>
       </div>
-      <div class = "panel top control add-margin">
+      <div class = "panel top control no-padding-bottom">
+        <div class = "icon icon_clock"></div>
+        <div class = "text">Системная задержка<div class = "text sub-title">Задержка, которая добавляется<br>между основными действиями</div></div>
+        <div class="custom-input right" style="width: 25%;">
+          <input id="delay_system" type="number" class="text right" title="delay_system" placeholder="" onchange="sendCommand('setDelaySystem',this.value)">
+          <div class="text right">мс.</div>   
+        </div>
+      </div>
+      <div class = "panel top control no-padding-bottom">
+        <div class = "icon icon_counter"></div>
+        <div class="text">Адресный номер<div class = "text sub-title">Для домофонных линий с цифровой<br>системой адресации</div></div>
+        <div class="custom-input right" style="width: 25%;">
+          <input id="address_counter" type="number" class="text right" title="address_counter" placeholder="" onchange="sendCommand('setAddressCounter',this.value)">
+        </div>
+      </div>
+      <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_led-on"></div>
-        <div class = "text">Светоиндикация</div>
+        <div class = "text">Светоиндикация<div class = "text sub-title">Индикация встроенными светодиодами</div></div>
         <label class="switch">
           <input id="led" type="checkbox" title="led" placeholder="" onclick="sendCommand('setLed',this.checked)">
           <span class="slider round"></span>
         </label>
       </div>
-      <div class = "panel top control add-margin">
+      <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_volume-high"></div>
-        <div class = "text">Аудиосообщение</div>
+        <div class = "text">Аудиосообщение<div class = "text sub-title">Воспроизводить аудиофайлы на блок вызова</div></div>
         <label class="switch">
           <input id="sound" type="checkbox" title="sound" placeholder="" onclick="sendCommand('setSound',this.checked)">
           <span class="slider round"></span>
         </label>
       </div>
-      <div class = "panel top control add-margin">
+      <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_greeting"></div>
-        <div class = "text">Приветствие</div>
+        <div class = "text">Приветствие<div class = "text sub-title">Дополнительный аудиофайл после открытия двери</div></div>
         <label class="switch">
           <input id="greeting" type="checkbox" title="greeting" placeholder="" onclick="sendCommand('setGreeting',this.checked)">
           <span class="slider round"></span>
         </label>
       </div>
-      <div class = "panel top control add-margin">
+      <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_bell-off"></div>
-        <div class = "text">Беззвучный режим</div>
+        <div class = "text">Беззвучный режим<div class = "text sub-title">Отключать физическую трубку при вызове</div></div>
         <label class="switch">
           <input id="mute" type="checkbox" title="mute" placeholder="" onclick="sendCommand('setMute',this.checked)">
           <span class="slider round"></span>
@@ -168,7 +183,7 @@
       </div>
       <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_phone-off"></div>
-        <div class = "text">Отключить трубку</div>
+        <div class = "text">Отключить трубку<div class = "text sub-title">Не использовать физическую трубку</div></div>
         <label class="switch">
           <input id="phone_disable" type="checkbox" title="phone_disable" placeholder="" onclick="sendCommand('setPhoneDisable',this.checked)">
           <span class="slider round"></span>
@@ -184,26 +199,26 @@
     <div style="display:none;">
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_wifi"></div>
-        <div class = "text">SSID</div>
+        <div class = "text">SSID<div class = "text sub-title">Название сети</div></div>
         <div class="custom-input right">
           <input id="ssid" type="text" class="text right" title="ssid" placeholder="Название Wi-Fi сети" onchange="sendCommand('setSSID',this.value)">
         </div>
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_form-textbox-password"></div>
-        <div class = "text">Пароль</div>
+        <div class = "text">Пароль<div class = "text sub-title">Пароль доступа</div></div>
         <div class="custom-input right">
           <input id="wifi_passwd" type="password" class="text right" title="wifi_passwd" placeholder="Пароль Wi-Fi сети" onchange="sendCommand('setWIFIPassword',this.value)">
         </div>
       </div>
       <div id="ip" class = "panel top control add-margin">
         <div id="icon" class = "icon icon_ip"></div>
-        <div class = "text">IP адрес</div>
+        <div class = "text">IP адрес<div class = "text sub-title">Адрес устройства в сети</div></div>
         <div id="value" class = "text right"></div>
       </div>
       <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_ftp"></div>
-        <div class = "text">Доступ по FTP</div>
+        <div class = "text">Доступ по FTP<div class = "text sub-title">Разрешить подключения по FTP</div></div>
         <label class="switch">
           <input id="ftp" type="checkbox" title="ftp" placeholder="" onclick="sendCommand('enableFTP',this.checked)">
           <span class="slider round"></span>
@@ -224,35 +239,35 @@
         <div class = "panel text sub-title" style="padding-top: var(--3wp);">Конфигурация MQTT-клиента</div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_bee"></div>
-          <div class = "text">Сервер MQTT</div>
+          <div class = "text">Сервер MQTT<div class = "text sub-title">Адрес сервера в сети</div></div>
           <div class="custom-input right">
             <input id="mqtt_server" type="text" class="text right" title="mqtt_serever" placeholder="Адрес MQTT сервера" onchange="sendCommand('setMQTTServer',this.value)">
           </div>
         </div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_counter"></div>
-          <div class = "text">Порт MQTT</div>
+          <div class = "text">Порт MQTT<div class = "text sub-title">Порт подключения</div></div>
           <div class="custom-input right" style="width: 25%;">
             <input id="mqtt_port" type="number" class="text right" title="mqtt_port" placeholder="Порт" onchange="sendCommand('setMQTTPort',this.value)">
           </div>
         </div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_account-circle"></div>
-          <div class = "text">Логин MQTT</div>
+          <div class = "text">Логин MQTT<div class = "text sub-title">Логин доступа</div></div>
           <div class="custom-input right">
             <input id="mqtt_login" type="text" class="text right" title="mqtt_login" placeholder="Логин" onchange="sendCommand('setMQTTLogin',this.value)">
           </div>
         </div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_form-textbox-password"></div>
-          <div class = "text">Пароль MQTT</div>
+          <div class = "text">Пароль MQTT<div class = "text sub-title">Пароль доступа</div></div>
           <div class="custom-input right">
             <input id="mqtt_passwd" type="password" class="text right" title="mqtt_passwd" placeholder="Пароль" onchange="sendCommand('setMQTTPassword',this.value)">
           </div>
         </div>
         <div class = "panel top control add-margin no-padding-bottom">
         <div class = "icon icon_retain"></div>
-        <div class = "text">Удержание сообщений</div>
+        <div class = "text">Удержание сообщений<div class = "text sub-title">Специальный retain флаг для mqtt-сообщений</div></div>
         <label class="switch">
           <input id="mqtt_retain" type="checkbox" title="mqtt_retain" placeholder="" onclick="sendCommand('setRetain',this.checked)">
           <span class="slider round"></span>
@@ -263,21 +278,21 @@
         <div class = "panel text sub-title" style="padding-top: var(--3wp);">Конфигурация Telegram-клиента</div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_key"></div>
-          <div class = "text">Токен доступа</div>
+          <div class = "text">Токен доступа<div class = "text sub-title">Ключ доступа к боту</div></div>
           <div class="custom-input right">
             <input id="tlg_token" type="text" class="text right" title="tlg_token" placeholder="Ключ доступа к боту" onchange="sendCommand('setTLGToken',this.value)">
           </div>
         </div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_account-circle"></div>
-          <div class = "text">ИД аккаунта</div>
+          <div class = "text">ИД аккаунтов<div class = "text sub-title">С административным доступом</div></div>
           <div class="custom-input right">
-            <input id="tlg_user" type="text" class="text right" title="tlg_user" placeholder="Разрешенный ИД" onchange="sendCommand('setTLGUser',this.value)">
+            <input id="tlg_user" type="text" class="text right" title="tlg_user" placeholder="Разрешенные ИД" onchange="sendCommand('setTLGUser',this.value)">
           </div>
         </div>
         <div id="access_code" class = "panel top control no-padding-bottom">
           <div id="icon" class = "icon icon_barcode"></div>
-          <div class = "text">Код открытия двери</div>
+          <div class = "text">Код открытия двери<div class = "text sub-title">Для публичного доступа</div></div>
           <div id="value" class = "text bold right">------</div>
           <div class = "horizontal-grid right">
             <button id="delete_code" class="flat_button right" onclick="sendCommand('code','delete');"><div class = "flat_icon icon_trash"></div></button>
@@ -286,7 +301,7 @@
         </div>
         <div class = "panel top control no-padding-bottom">
           <div class = "icon icon_timer-sand"></div>
-          <div class="text">Время действия кода</div>
+          <div class="text">Время действия кода<div class = "text sub-title">Для публичного доступа</div></div>
           <div class="custom-input right" style="width: 30%;">
             <input id="access_code_lifetime" type="number" class="text right" title="access_code_lifetime" placeholder="" onchange="sendCommand('setCodeLifeTime',this.value)">
             <div class="text right">мин.</div>   
@@ -303,21 +318,21 @@
     <div style="display:none;">
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_account-circle"></div>
-        <div class = "text">Логин</div>
+        <div class = "text">Логин<div class = "text sub-title">Авторизации на WEB интерфейсе</div></div>
         <div class="custom-input right">
           <input id="user_login" type="text" class="text right" title="user_login" placeholder="Логин доступа к WEB" onchange="sendCommand('setUserLogin',this.value)">
         </div>
       </div>
       <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_form-textbox-password"></div>
-        <div class = "text">Пароль</div>
+        <div class = "text">Пароль<div class = "text sub-title">Авторизации на WEB интерфейсе</div></div>
         <div class="custom-input right">
           <input id="user_passwd" type="password" class="text right" title="user_passwd" placeholder="Пароль доступа к WEB" onchange="sendCommand('setUserPassword',this.value)">
         </div>
       </div>
-      <div class = "panel top control add-margin">
+      <div class = "panel top control add-margin no-padding-bottom">
           <div class = "icon icon_shield-key"></div>
-          <div class = "text">Авторизация доступа</div>
+          <div class = "text">Авторизация доступа<div class = "text sub-title">Включить авторизацию на WEB интерфейсе</div></div>
           <label class="switch">
             <input id="web_auth" type="checkbox" title="web_auth" placeholder="" onclick="sendCommand('setAuth',this.checked)">
             <span class="slider round"></span>
@@ -325,7 +340,7 @@
       </div>
       <div class = "panel top control add-margin no-padding-bottom">
           <div class = "icon icon_child-lock"></div>
-          <div class = "text">Блокировка от детей</div>
+          <div class = "text">Блокировка от детей<div class = "text sub-title">Игнорировать нажатия на физическую кнопку</div></div>
           <label class="switch">
             <input id="child_lock" type="checkbox" title="child_lock" placeholder="" onclick="sendCommand('setChildLock',this.checked)">
             <span class="slider round"></span>
@@ -341,15 +356,15 @@
     <div style="display:none;">
       <div id="fs_used" class = "panel top control add-margin no-padding-bottom">
         <div id="icon" class = "icon icon_micro-sd"></div>
-        <div class = "text">Свободно памяти</div>
+        <div class = "text">Свободно памяти<div class = "text sub-title">Количество свободного места ПЗУ</div></div>
         <div id="value" class = "text right"></div>
       </div>
 
       <div class = "panel top control add-margin-top no-padding-bottom">
         <div class = "icon icon_mp3"></div>
-        <div class = "text">Сообщение при открытии</div>
+        <div class = "text">Сообщение при открытии<div class = "text sub-title">Воспроизводимое перед открытием</div></div>
         <div class = "horizontal-grid right">
-          <input type="file" id="access_allowed" accept=".mp3" hidden onchange="uploadMedia(this);">
+          <input type="file" id="access_allowed" accept=".mp3, .wav" hidden onchange="uploadMedia(this);">
           <audio id="access_allowed_play" src="" type="audio/mpeg"></audio>   
           <button id="access_allowed_play_btn_play" class="flat_button right" onclick="document.getElementById('access_allowed_play').play();" hidden><div class = "flat_icon icon_play"></div></button>
           <button id="access_allowed_play_btn_delete" class="flat_button right" onclick="sendCommand('mediaDelete','access_allowed');" hidden><div class = "flat_icon icon_trash"></div></button>
@@ -359,9 +374,9 @@
       <div id="access_allowed_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
       <div class = "panel top control add-margin-top no-padding-bottom">
         <div class = "icon icon_mp3"></div>
-        <div class = "text">Сообщение после открытия</div>
+        <div class = "text">Сообщение после открытия<div class = "text sub-title">Воспроизводимое после открытия</div></div>
         <div class = "horizontal-grid right">
-          <input type="file" id="greeting_allowed" accept=".mp3" hidden onchange="uploadMedia(this);">
+          <input type="file" id="greeting_allowed" accept=".mp3, .wav" hidden onchange="uploadMedia(this);">
           <audio id="greeting_allowed_play" src="" type="audio/mpeg"></audio>   
           <button id="greeting_allowed_play_btn_play" class="flat_button right" onclick="document.getElementById('greeting_allowed_play').play();" hidden><div class = "flat_icon icon_play"></div></button>
           <button id="greeting_allowed_play_btn_delete" class="flat_button right" onclick="sendCommand('mediaDelete','greeting_allowed');" hidden><div class = "flat_icon icon_trash"></div></button>
@@ -371,9 +386,9 @@
       <div id="greeting_allowed_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
       <div class = "panel top control add-margin-top no-padding-bottom">
         <div class = "icon icon_mp3"></div>
-        <div class = "text">Сообщение для курьера</div>
+        <div class = "text">Сообщение для курьера<div class = "text sub-title">Воспроизводимое перед открытием</div></div>
         <div class = "horizontal-grid right">
-          <input type="file" id="delivery_allowed" accept=".mp3" hidden onchange="uploadMedia(this);">
+          <input type="file" id="delivery_allowed" accept=".mp3, .wav" hidden onchange="uploadMedia(this);">
           <audio id="delivery_allowed_play" src="" type="audio/mpeg"></audio>   
           <button id="delivery_allowed_play_btn_play"class="flat_button right" onclick="document.getElementById('delivery_allowed_play').play();" hidden><div class = "flat_icon icon_play"></div></button>
           <button id="delivery_allowed_play_btn_delete"class="flat_button right" onclick="sendCommand('mediaDelete','delivery_allowed');" hidden><div class = "flat_icon icon_trash"></div></button>
@@ -383,9 +398,9 @@
       <div id="delivery_allowed_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
       <div class = "panel top control add-margin-top no-padding-bottom ">
         <div class = "icon icon_mp3"></div>
-        <div class = "text">Сообщение при отказе</div>
+        <div class = "text">Сообщение при отказе<div class = "text sub-title">Воспроизводимое перед сбросом</div></div>
         <div class = "horizontal-grid right">
-          <input type="file" id="access_denied" accept=".mp3" hidden onchange="uploadMedia(this);">
+          <input type="file" id="access_denied" accept=".mp3, .wav" hidden onchange="uploadMedia(this);">
           <audio id="access_denied_play" src="" type="audio/mpeg"></audio>   
           <button id="access_denied_play_btn_play" class="flat_button right" onclick="document.getElementById('access_denied_play').play();" hidden><div class = "flat_icon icon_play"></div></button>
           <button id="access_denied_play_btn_delete" class="flat_button right" onclick="sendCommand('mediaDelete','access_denied');" hidden><div class = "flat_icon icon_trash"></div></button>

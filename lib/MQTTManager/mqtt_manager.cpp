@@ -1,6 +1,7 @@
 #include "mqtt_manager.h"
 
 static const char * TAG = "MQTT";
+extern void LOG(const char * format, ...);
 
 MQTTManager::MQTTManager(std::string server, uint16_t port, std::string login, std::string passwd) {
     this->server = server;
@@ -38,7 +39,7 @@ void MQTTManager::handle() {
         if (millis() - previousMQTTMillis >= 15000) {
             mqtt_client->disconnect();
             mqtt_client->setServer(server.c_str(), port);
-            Serial.printf("[%s] Attempting MQTT connection: %s:%d\n", TAG, server.c_str(), port);
+            LOG("[%s] Attempting MQTT connection: %s:%d\n", TAG, server.c_str(), port);
             if (mqtt_client->connect(client_id.c_str(), login.c_str(), passwd.c_str())) {
                 previousMQTTMillis = millis();
                 last_error = 0;
@@ -46,7 +47,7 @@ void MQTTManager::handle() {
                 device_online();
             } else {
                 last_error = 5;
-                Serial.printf("[%s] Connection error: %d\n", TAG, mqtt_client->state());
+                LOG("[%s] Connection error: %d\n", TAG, mqtt_client->state());
             }
             previousMQTTMillis = millis();
         }
