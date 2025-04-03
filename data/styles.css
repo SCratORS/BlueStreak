@@ -16,6 +16,7 @@
   --color-control-border: #C0C5CE;
   --width: min(80vw, 480px);
   --1wp: calc(var(--width) * 0.01);
+  --1-5wp: calc(var(--width) * 0.015);
   --2wp: calc(var(--width) * 0.02);
   --3wp: calc(var(--width) * 0.03);
   --4wp: calc(var(--width) * 0.04);
@@ -328,6 +329,7 @@ button  {
   height: var(--4wp);
   margin-right: 0;
   margin-left: auto;
+  margin-top: var(--1-5wp);
 }
 .switch input {
   opacity: 0;

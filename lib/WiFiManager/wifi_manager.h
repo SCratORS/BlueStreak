@@ -2,6 +2,7 @@
 #include <string>
 #include <DNSServer.h>
 #include "WiFi.h"
+#include <WiFiUdp.h>
 
 #define CONFIG_CHIP_DEVICE_PRODUCT_NAME "SmartIntercom"
 

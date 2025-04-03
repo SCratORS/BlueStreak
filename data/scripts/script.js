@@ -85,7 +85,8 @@ function closeAllSelect(elmnt) {
 then close all select boxes: */
 document.addEventListener("click", closeAllSelect);
 
-var gateway = "ws://"+window.location.hostname+"/ws";
+const protocol = (window.location.protocol === 'https:') ? 'wss://' : 'ws://';
+const gateway = protocol + window.location.host + '/ws';
 var websocket;
 window.addEventListener('load', onLoad);
 function initWebSocket() {
@@ -208,32 +209,41 @@ function progressError(event) {
 
 function uploadMedia(element) {
   const file = element.files[0];
-  if (uploading) alert("Дождитесь окончания предыдущей загрузки.");
+  const ext = file.name.slice((file.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+  if (uploading) {
+    alert("Дождитесь окончания предыдущей загрузки.");
+    return;
+  }
+  if (ext != "mp3" && ext != "wav") {
+    alert('Неподходящий тип файла.');
+    this.value = null;
+    return;
+  }
   if (!file) return;
   if (file.size > 4 * BYTES_IN_MB) {
-    alert('Очень большой файл.')
-    this.value = null
-  } else {
-    uploading = true;
-    let progress = 'access_allowed_progress';
-    if (element.id == 'access_allowed') progress = 'access_allowed_progress';
-    if (element.id == 'greeting_allowed') progress = 'greeting_allowed_progress';
-    if (element.id == 'delivery_allowed') progress = 'delivery_allowed_progress';
-    if (element.id == 'access_denied') progress = 'access_denied_progress';
-
-    progressBarPanel = document.getElementById(progress);
-    progressBarPanel.hidden = false;
-    progressBar = progressBarPanel.querySelector("#progressBar");
-
-    const formSent = new FormData();
-    const xhr = new XMLHttpRequest();
-    formSent.append("media", file, element.id + ".mp3");
-    xhr.upload.addEventListener('progress', progressHandler, false);
-    xhr.upload.addEventListener('error', progressError, false);
-    xhr.addEventListener('load', loadHandler, false);
-    xhr.open('POST', '/upload');
-    xhr.send(formSent);
+    alert('Очень большой файл.');
+    this.value = null;
+    return;
   }
+  uploading = true;
+  let progress = 'access_allowed_progress';
+  if (element.id == 'access_allowed') progress = 'access_allowed_progress';
+  if (element.id == 'greeting_allowed') progress = 'greeting_allowed_progress';
+  if (element.id == 'delivery_allowed') progress = 'delivery_allowed_progress';
+  if (element.id == 'access_denied') progress = 'access_denied_progress';
+
+  progressBarPanel = document.getElementById(progress);
+  progressBarPanel.hidden = false;
+  progressBar = progressBarPanel.querySelector("#progressBar");
+
+  const formSent = new FormData();
+  const xhr = new XMLHttpRequest();
+  formSent.append("media", file, element.id + "." + ext);
+  xhr.upload.addEventListener('progress', progressHandler, false);
+  xhr.upload.addEventListener('error', progressError, false);
+  xhr.addEventListener('load', loadHandler, false);
+  xhr.open('POST', '/upload');
+  xhr.send(formSent);
 }
 
 function updateOTA(element) {

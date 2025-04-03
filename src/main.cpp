@@ -1,5 +1,6 @@
 #include <ESPAsyncWebserver.h>
 #include <Update.h>
+#include <Syslog.h>
 #include "FTPServer.h"
 #include "driver/pcnt.h"
 #include <ArduinoJson.h>
@@ -16,34 +17,36 @@
 #include "binary_sensor.h"
 
 #include "AudioGeneratorMP3.h"
+#include "AudioGeneratorWAV.h"
 #include "AudioOutputI2S.h"
 #include "LittleFS.h"
 #include "AudioFileSourceLittleFS.h"
 #define aFS LittleFS
-#define aFS_STR "LittleFS"
 
 static const char* TAG = "MAIN";
 std::string mode_name[3] = {"Не активен","Сброс вызова","Открывать всегда"}; 
-enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
-uint8_t currentAction = WAIT;
-uint32_t detectMillis = 0;
-uint32_t audioLength = 0;
+enum GeneratorType {WAV, MP3, UNK};
+enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, SWCLOSE, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
+static uint8_t currentAction = WAIT;
+static uint32_t detectMillis = 0;
+static uint32_t audioLength = 0;
 
-AudioOutputI2S *audioOut = new AudioOutputI2S(0, AudioOutputI2S::INTERNAL_DAC);
-AudioGeneratorMP3 *audioPlayer;
-AudioFileSource *audioFile;
+static AudioOutputI2S *audioOut = new AudioOutputI2S(0, AudioOutputI2S::INTERNAL_DAC);
+static AudioGenerator *audioPlayer;
+static AudioFileSource *audioFile;
+static JsonDocument json;
+static std::string message;
+static const uint16_t DEBOUNCE_DELAY = 100;
+static const uint16_t LONGPRESS_DELAY = 5000;
+static bool btnPressFlag = false;
+static uint32_t last_toggle;
 
-const uint16_t DEBOUNCE_DELAY = 100;
-const uint16_t LONGPRESS_DELAY = 5000;
-bool btnPressFlag = false;
-uint32_t last_toggle;
-
-struct {
+static struct {
   bool line_detect;
   std::string line_status;
 } device_status;
 
-struct {
+static struct {
   bool web_services_init = false;
   bool time_configure = false;
   uint8_t last_error = 0;
@@ -54,8 +57,13 @@ MQTTManager * mqtt_manager;
 TLGManager * tlg_manager;
 WiFiManager * wifi_manager;
 SettingsManager * settings_manager;
-AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
+static AsyncWebServer server(80);
+static AsyncWebSocket ws("/ws");
+static HTTPClient https_client;
+static HTTPClient https_client_post;
+static WiFiUDP udpClient;
+
+Syslog * syslog;
 
 Switch * accept_once;
 Switch * reject_once;
@@ -73,13 +81,61 @@ DevInfo * device_info;
 hw_timer_t * timer0 = NULL;
 void ICACHE_RAM_ATTR call_detector_enable();
 
-uint8_t ledIndicatorCounter = 0;
-uint8_t ledStatusCounter = 0;
-uint8_t ledErrorCounter = 0;
+static uint8_t ledIndicatorCounter = 0;
+static uint8_t ledStatusCounter = 0;
+static uint8_t ledErrorCounter = 0;
 
-int16_t currentAddressCounter = 0;
-bool syncCounter = false;
-bool triggerCounter = false;
+static int16_t currentAddressCounter = 0;
+static bool syncCounter = false;
+static bool triggerCounter = false;
+
+void LOG(const char * format, ...) {
+    char loc_buf[64];
+    char * temp = loc_buf;
+    va_list arg;
+    va_list copy;
+    va_start(arg, format);
+    va_copy(copy, arg);
+    int len = vsnprintf(temp, sizeof(loc_buf), format, copy);
+    va_end(copy);
+    if(len < 0) {
+        va_end(arg);
+        return;
+    }
+    if(len >= (int)sizeof(loc_buf)){  // comparation of same sign type for the compiler
+        temp = (char*) malloc(len+1);
+        if(temp == NULL) {
+            va_end(arg);
+            return;
+        }
+        len = vsnprintf(temp, len+1, format, arg);
+    }
+    va_end(arg);
+    if (syslog) syslog->log(temp);
+    Serial.printf("[%d] ", millis());
+    Serial.print(temp);
+}
+
+const GeneratorType get_file_type_(const char *filename) {
+  const char *dot = strrchr(filename, '.');
+  if (!dot) {
+      return UNK;
+  }
+  dot++;
+  if ((dot[0] == 'w' || dot[0] == 'W') &&
+      (dot[1] == 'a' || dot[1] == 'A') &&
+      (dot[2] == 'v' || dot[2] == 'V') &&
+      (dot[3] == 0)) {
+      return WAV;
+  }
+  if ((dot[0] == 'm' || dot[0] == 'M') &&
+      (dot[1] == 'p' || dot[1] == 'P') && 
+      (dot[2] == '3') && 
+      (dot[3] == 0)) {
+      return MP3;
+  }
+  return UNK;
+}
 
 void mqtt_publish_once_actions(){
   if (accept_once) accept_once->publishValue();
@@ -99,22 +155,20 @@ std::string get_fs_used() {
 
 void setLineStatus(std::string value){
   device_status.line_status = value;
-  JsonDocument json;
+  json.clear();
   json["line_status"] = device_status.line_status;
-  std::string message;
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   if (line_status) line_status->publishValue();
   ws.textAll(message.c_str());
 }
 
 void setLineDetect(bool value){
   device_status.line_detect = value;
-  JsonDocument json;
+  json.clear();
   json["line_detect"] = device_status.line_detect;
-  std::string message;
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   if (line_detect) line_detect->publishValue();
   if (tlg_manager) {
     if (settings_manager->settings.delivery) tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚚 Входящий вызов в домофон!\nОткрываю дверь один раз.", true);
@@ -132,24 +186,22 @@ void setLineDetect(bool value){
 }
 
 void sendAlert(std::string value){
-  JsonDocument json;
+  json.clear();
   json["alert"] = value;
-  std::string message;
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   ws.textAll(message.c_str());
 }
 
 void sendStatus(){
-  JsonDocument json;
+  json.clear();
   json["accept_call"] = settings_manager->settings.accept_call;
   json["delivery"] =    settings_manager->settings.delivery;
   json["reject_call"] = settings_manager->settings.reject_call;
   json["line_detect"] = device_status.line_detect;
   json["line_status"] = device_status.line_status;
-  std::string message;
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   ws.textAll(message.c_str());
   if (line_detect) line_detect->publishValue();
   if (line_status) line_status->publishValue();
@@ -157,30 +209,28 @@ void sendStatus(){
 }
 
 std::string getMediaExists() {
-  JsonDocument json;
+  json.clear();
   json["fs_used"] = get_fs_used();
-  json["access_allowed_play"] = aFS.exists(ACCEPT_FILENAME)?ACCEPT_FILENAME:NULL;
-  json["greeting_allowed_play"] = aFS.exists(GREETING_FILENAME)?GREETING_FILENAME:NULL;
-  json["delivery_allowed_play"] = aFS.exists(DELIVERY_FILENAME)?DELIVERY_FILENAME:NULL;
-  json["access_denied_play"] =    aFS.exists(REJECT_FILENAME)?REJECT_FILENAME:NULL;
-  std::string message;
+  json["access_allowed_play"] =   aFS.exists(String(ACCEPT_FILENAME) + ".mp3") ? (String(ACCEPT_FILENAME) + ".mp3") : ( aFS.exists(String(ACCEPT_FILENAME) + ".wav") ? (String(ACCEPT_FILENAME) + ".wav") : nullptr);
+  json["greeting_allowed_play"] = aFS.exists(String(GREETING_FILENAME) + ".mp3") ? (String(GREETING_FILENAME) + ".mp3") : ( aFS.exists(String(GREETING_FILENAME) + ".wav") ? (String(GREETING_FILENAME) + ".wav") : nullptr);
+  json["delivery_allowed_play"] = aFS.exists(String(DELIVERY_FILENAME) + ".mp3") ? (String(DELIVERY_FILENAME) + ".mp3") : ( aFS.exists(String(DELIVERY_FILENAME) + ".wav") ? (String(DELIVERY_FILENAME) + ".wav") : nullptr);
+  json["access_denied_play"] =    aFS.exists(String(REJECT_FILENAME) + ".mp3") ? (String(REJECT_FILENAME) + ".mp3") : ( aFS.exists(String(REJECT_FILENAME) + ".wav") ? (String(REJECT_FILENAME) + ".wav") : nullptr);
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
 std::string getStatus(){ 
   device_info->control = "http://"+wifi_manager->ip;
-  JsonDocument json;
+  json.clear();
   json["ftp"] = (ftp_server)?true:false;
   json["ip"] = wifi_manager->ip;
   json["line_detect"] = device_status.line_detect;
   json["line_status"] = device_status.line_status;
   json["firmware"] = CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION;
   json["copyright"] = COPYRIGHT;
-  std::string message;
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
@@ -208,7 +258,7 @@ void IRAM_ATTR TimerHandler0() {
     }
     if (ledErrorCounter>160) ledErrorCounter = 0;
   } else {
-    if (settings_manager && settings_manager->settings.led) {
+    if (settings_manager->settings.led) {
       if (settings_manager->settings.reject_call) {
           switch (ledStatusCounter++) {
               case 0: gpio_set_level(led_status, 1); break;
@@ -249,7 +299,11 @@ void IRAM_ATTR TimerHandler0() {
 uint64_t reset_time = 0;
 void calling_detect() {
   if (currentAction == WAIT) {
-    if (settings_manager->settings.mute) {
+    if (settings_manager->settings.mute && 
+        (settings_manager->settings.accept_call ||
+        settings_manager->settings.delivery ||
+        settings_manager->settings.reject_call ||
+        settings_manager->settings.modes )) {
       gpio_set_level(switch_phone, 1);  
       gpio_set_level(relay_line, 1);
     }
@@ -284,21 +338,35 @@ void phone_disable_action () {
 }
 
 bool initAudio(const char * filename) {
-  audioFile = new AudioFileSourceLittleFS(filename);
-   if (audioFile) {
-      audioPlayer = new AudioGeneratorMP3();
-      audioPlayer->begin(audioFile, audioOut);
-      audioLength = millis();
-      return true;
-   }
-   return false;
+  if (aFS.exists(String(filename) + ".mp3")) {
+    audioFile = new AudioFileSourceLittleFS((String(filename) + ".mp3").c_str());
+    if (audioFile) {
+        audioPlayer = new AudioGeneratorMP3();
+        if (audioPlayer && audioPlayer->begin(audioFile, audioOut)) {
+          audioLength = millis();
+          return true;
+        }
+    }
+  } 
+  if (aFS.exists(String(filename) + ".wav")) {
+    audioFile = new AudioFileSourceLittleFS((String(filename) + ".wav").c_str());
+    if (audioFile) {
+        audioPlayer = new AudioGeneratorWAV();
+        if (audioPlayer && audioPlayer->begin(audioFile, audioOut)) {
+          audioLength = millis();
+          return true;
+        }
+    }
+  }   
+  LOG("[%s] %s\n", TAG, "Error open audio file");
+  return false;
 }
 
 void deleteAudio(){
   audioPlayer->stop();
   audioLength = millis() - audioLength;
   delete audioPlayer; audioPlayer = nullptr;
-  delete audioFile; audioFile = nullptr;
+  delete audioFile; audioFile = nullptr; 
 }
 
 uint64_t timerAction = 0;
@@ -317,7 +385,7 @@ void doAction(uint32_t timer) {
                         settings_manager->settings.modes ) {
                           currentAction = CALL;
                           detectMillis = millis(); 
-                          timerAction += settings_manager->settings.delay_before;       
+                          timerAction += settings_manager->settings.delay_system;      
                         }    
                   } break;
     case CALL:  if (timer > timerAction) {
@@ -342,7 +410,7 @@ void doAction(uint32_t timer) {
                   currentAction = ( settings_manager->settings.delivery || 
                                     settings_manager->settings.accept_call || 
                                     (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? PREOPEN : DROP;
-                  if (currentAction == PREOPEN) timerAction += settings_manager->settings.delay_before;
+                  if (currentAction == PREOPEN) timerAction += settings_manager->settings.delay_system;
                 } break;
     case VOICE: if (!audioPlayer->loop()) {
                   deleteAudio();
@@ -352,17 +420,24 @@ void doAction(uint32_t timer) {
                 } break;
     case PREOPEN: if (timer > timerAction) currentAction = SWOPEN;
                   break;
-    case SWOPEN:  gpio_set_level(switch_open, 1);
+    case SWOPEN:  if (settings_manager->settings.force_open) gpio_set_level(relay_line, 0);
+                  else gpio_set_level(switch_open, 1);
                   setLineStatus(l_status_open);
                   timerAction += (audioLength + settings_manager->settings.delay_open);
-                  currentAction = settings_manager->settings.greeting?GREETING:DROP;
+                  currentAction = settings_manager->settings.greeting?GREETING:SWCLOSE;
                   break;
+    case SWCLOSE: if (timer > timerAction) {
+                    gpio_set_level(switch_open, 0);
+                    timerAction += settings_manager->settings.delay_system;
+                    currentAction = DROP;
+                  } break;
     case GREETING: if (timer > timerAction) {
                     if (settings_manager->settings.sound) {
                       if (initAudio(GREETING_FILENAME)) {
                         setLineStatus(l_status_answer);
                         currentAction = GREETING_VOICE;
-                        gpio_set_level(switch_open, 0);
+                        if (settings_manager->settings.force_open) gpio_set_level(relay_line, 1);
+                        else gpio_set_level(switch_open, 0);
                         timerAction += settings_manager->settings.greeting_delay;
                         break;
                       }
@@ -377,7 +452,8 @@ void doAction(uint32_t timer) {
                   }
                 } break;
     case DROP:  if (timer > timerAction) {
-                  gpio_set_level(switch_open, 0);
+                  if (settings_manager->settings.force_open) gpio_set_level(relay_line, 1);
+                  else gpio_set_level(switch_open, 0);
                   gpio_set_level(switch_phone, 1); 
                   setLineStatus(l_status_reject);
                   currentAction = ENDING;
@@ -413,11 +489,10 @@ std::string enable_ftp_server(bool value) {
       delete ftp_server; ftp_server = nullptr;
     }
   }
-  JsonDocument json;
+  json.clear();
   json["ftp"] = value;
-  std::string message;
   serializeJson(json, message);
-  Serial.printf("[%s] %s\n", TAG, message.c_str());
+  LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
@@ -428,6 +503,14 @@ void setMode(uint8_t value) {
 
 void setRoom(uint8_t value) {
   ws.textAll(settings_manager->setAddressCounter(value).c_str());
+}
+
+void setSysLogPort(uint16_t value) {
+  ws.textAll(settings_manager->setSysLogPort(value).c_str());
+}
+
+void setSysLogServer(std::string value) {
+  ws.textAll(settings_manager->setSysLogServer(value).c_str());
 }
 
 void setAccept(bool value) {
@@ -454,7 +537,9 @@ void setMute(bool value) {
   ws.textAll(settings_manager->setMute(value).c_str());
   if (mute) mute->publishValue();
 }
-
+void setSysDelay(uint16_t value) {
+  ws.textAll(settings_manager->setDelaySystem(value).c_str());
+}
 void setPhoneDisable(bool value) {
   ws.textAll(settings_manager->setPhoneDisable(value).c_str());
   if (phone_disable) phone_disable->publishValue();
@@ -515,7 +600,7 @@ void tlg_message(std::string from_id, std::string chat_id, std::string message, 
       } else {
           if (message == "✅ Открой дверь") {setAccept(true); tlg_manager->sendMessage(chat_id, "Открываю дверь.");}
           else {
-            tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✉️Cообщение от пользователя @" + user_name + " :\n" + message);
+            tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✉️ Cообщение от пользователя @" + user_name + " :\n" + message);
             tlg_manager->sendMessage(chat_id, "Ваше сообщение отправлено Администратору.");
           }
       }
@@ -566,7 +651,7 @@ void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
   payload[length] = 0;
   std::string strTopic = (char*)topic;
   std::string message  = (char*)payload;
-  Serial.printf("[%s] MQTT TOPIC: %s MESSAGE: %s\n", TAG, strTopic.c_str(), message.c_str());
+  LOG("[%s] MQTT TOPIC: %s MESSAGE: %s\n", TAG, strTopic.c_str(), message.c_str());
   mqtt_manager->getEntity(strTopic.c_str())->callback(message);
   
   if (strTopic == modes->callback_topic) setMode(settings_manager->settings.modes);
@@ -622,17 +707,17 @@ void entity_delete() {
 
 TaskHandle_t getTLGUpdateTask;
 void getTLGUpdate(void * pvParameters) {
-  while (tlg_manager && tlg_manager->enabled()) {
-    tlg_manager->getUpdate();
-  }
+  while (tlg_manager && tlg_manager->enabled()) tlg_manager->getUpdate();
+  while (tlg_manager && tlg_manager->await()) tlg_manager->stop();
   delete (tlg_manager); tlg_manager = nullptr;
   vTaskDelete(getTLGUpdateTask);
 }
 
 void enable_tlg(bool value){
   if (value) {
+    if (settings_manager->settings.tlg_token == "") return;
     if (tlg_manager) return;
-    tlg_manager = new TLGManager();
+    tlg_manager = new TLGManager(&https_client, &https_client_post);
     tlg_manager->settings_manager = settings_manager;
     tlg_manager->setToken(settings_manager->settings.tlg_token);
     tlg_manager->message = tlg_message;
@@ -652,7 +737,7 @@ void enable_tlg(bool value){
 void enable_mqtt(bool value) {
   if (value) {
     if (mqtt_manager) return;
-    mqtt_manager = new MQTTManager(
+      mqtt_manager = new MQTTManager(
       settings_manager->settings.mqtt_server,
       settings_manager->settings.mqtt_port,
       settings_manager->settings.mqtt_login,
@@ -671,19 +756,50 @@ void enable_mqtt(bool value) {
   }
 }
 
+std::string enable_force_open(bool value) {
+  settings_manager->settings.force_open = value;
+  json.clear();
+  json["force_open"] = settings_manager->settings.force_open;
+  serializeJson(json, message);
+  LOG("[%s] %s\n", TAG, message.c_str());
+  return message;
+}
+
+std::string enable_syslog(bool value) {
+  if (value) {
+    if (wifi_manager)
+      if (!syslog && settings_manager->settings.syslog_server != "") syslog = new Syslog(udpClient,
+      settings_manager->settings.syslog_server.c_str(),
+      settings_manager->settings.syslog_port,
+      CONFIG_CHIP_DEVICE_PRODUCT_NAME,CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION,LOG_KERN);
+  } else {
+    if (syslog) {
+      delete (syslog); syslog = nullptr;
+    }
+  }
+  settings_manager->settings.syslog = syslog?true:false;
+  json.clear();
+  json["syslog"] = settings_manager->settings.syslog;
+  serializeJson(json, message);
+  LOG("[%s] %s\n", TAG, message.c_str());
+  return message;
+}
+
 void save_settings(){
   settings_manager->SaveSettings(aFS);
   wifi_manager->setSSID(settings_manager->settings.wifi_ssid);
   wifi_manager->setPasswd(settings_manager->settings.wifi_passwd);
   enable_mqtt(false);
   enable_tlg(false);
+  enable_syslog(false);
   delay(1000);
+  enable_syslog(settings_manager->settings.syslog);
   enable_mqtt(settings_manager->settings.server_type == 1);
   enable_tlg(settings_manager->settings.server_type == 2);
 }
 
 void factory_reset() {
-  Serial.printf("[%s] Factory reset\n", TAG);
+  LOG("[%s] Factory reset\n", TAG);
   gpio_set_level(led_status, 1);
   delay(50);
   gpio_set_level(led_status, 0);
@@ -701,13 +817,12 @@ void factory_reset() {
   save_settings();
 }
 
-
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     std::string json_text = (char*)data;
-    Serial.printf("[%s] %s\n", TAG, json_text.c_str());
+    LOG("[%s] %s\n", TAG, json_text.c_str());
     JsonDocument doc;
     deserializeJson(doc, json_text);
     if (doc["method"] == "getSettings") { ws.textAll(settings_manager->getSettings().c_str());
@@ -718,6 +833,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setAccept")   { setAccept(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setDelivery") { setDelivery(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setReject")   { setReject(doc["value"].as<bool>()); return; }
+    if (doc["method"] == "setDelaySystem") { setSysDelay(doc["value"].as<uint16_t>()); return; }
     if (doc["method"] == "setDelayBeforeAnswer") { ws.textAll(settings_manager->setDelayBeforeAnswer(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayOpen") { ws.textAll(settings_manager->setDelayOpen(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayAfterClose") { ws.textAll(settings_manager->setDelayAfterClose(doc["value"].as<uint16_t>()).c_str()); return; }
@@ -774,8 +890,10 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       if (value == "greeting_allowed") file = GREETING_FILENAME;
       if (value == "delivery_allowed") file = DELIVERY_FILENAME;
       if (value == "access_denied") file = REJECT_FILENAME;
-      if (file != "" && aFS.exists(file.c_str()) && aFS.remove(file.c_str())) ws.textAll(getMediaExists().c_str());
-      else sendAlert("Ошибка удаления файла "+ value);
+      if (file != "")
+        if (aFS.exists((file + ".mp3").c_str()) && aFS.remove((file + ".mp3").c_str())) ws.textAll(getMediaExists().c_str());
+        else if (aFS.exists((file + ".wav").c_str()) && aFS.remove((file + ".wav").c_str())) ws.textAll(getMediaExists().c_str());
+        else sendAlert("Ошибка удаления файла "+ value);
     }
   }
 }
@@ -789,18 +907,18 @@ void onBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t in
 void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){ 
   if (!index) {
     request->_tempFile = aFS.open("/media/" + filename, "w");
-    Serial.printf("[%s] Start upload file %s\n", TAG, filename.c_str());
+    LOG("[%s] Start upload file %s\n", TAG, filename.c_str());
   }
   if (len) request->_tempFile.write(data, len);
   if (final) {
-    Serial.printf("[%s] File upload complete %s\n", TAG, filename.c_str());
+    LOG("[%s] File upload complete %s\n", TAG, filename.c_str());
     ws.textAll(getMediaExists().c_str());
     request->_tempFile.close();
   }
 }
 
 void onREST(AsyncWebServerRequest *request) {
-  JsonDocument json;
+  json.clear();
   uint8_t params = request->params();
   for(uint8_t i=0;i<params;i++){
     AsyncWebParameter* p = request->getParam(i);
@@ -812,9 +930,29 @@ void onREST(AsyncWebServerRequest *request) {
         json["ftp"] = settings_manager->settings.ftp;
         continue;
       }
+      if (p->name() == "force_open") {
+        if (p->value() != "") ws.textAll(enable_force_open(p->value() == "true").c_str());
+        json["force_open"] = settings_manager->settings.force_open;
+        continue;
+      }
+      if (p->name() == "syslog") {
+        if (p->value() != "") ws.textAll(enable_syslog(p->value() == "true").c_str());
+        json["syslog"] = settings_manager->settings.syslog;
+        continue;
+      }
+      if (p->name() == "syslog_port") {
+        if (p->value() != "") setSysLogPort(atoi(p->value().c_str()));
+        json["syslog_port"] = settings_manager->settings.syslog_port;
+        continue;
+      }
+      if (p->name() == "syslog_server") {
+        if (p->value() != "") setSysLogServer(p->value().c_str());
+        json["syslog_server"] = settings_manager->settings.syslog_server;
+        continue;
+      }
       if (p->name() == "send") {
         if (p->value() != "")
-        json["send"] = tlg_manager?(tlg_manager->sendMessage(settings_manager->settings.tlg_user, p->value().c_str(), true)?"ok":"error"):"telegram not active";
+        json["send"] = tlg_manager->enabled()?(tlg_manager->sendMessage(settings_manager->settings.tlg_user, p->value().c_str(), true)?"ok":"error"):"telegram not active";
         continue;
       }
       if (p->name() == "mute") {
@@ -822,8 +960,14 @@ void onREST(AsyncWebServerRequest *request) {
         json["mute"] = settings_manager->settings.mute;
         continue;
       }
+      if (p->name() == "sys_delay") {
+        if (p->value() != "") setSysDelay(atoi(p->value().c_str()));
+        json["sys_delay"] = settings_manager->settings.delay_system;
+        continue;
+      }
       if (p->name() == "heap") {
         json["heap"] = ESP.getFreeHeap();
+        json["max_buff"] = heap_caps_get_largest_free_block(0);
         continue;
       }
       if (p->name() == "reset") {
@@ -859,7 +1003,6 @@ void onREST(AsyncWebServerRequest *request) {
       }
       if (p->name() == "restart" || p->name() == "reboot") {
         json["restart"] = "ok";
-        std::string message;
         serializeJson(json, message);
         request->send(200, "text/html", message.c_str());
         sendAlert("Устройство перезагружается");
@@ -880,15 +1023,14 @@ void onREST(AsyncWebServerRequest *request) {
       continue;
     }
   }
-  std::string message;
   serializeJson(json, message);
   request->send(200, "text/html", message.c_str());
 }
 
 void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   switch (type) {
-    case WS_EVT_CONNECT: Serial.printf("[%s] WebSocket client #%u connected from %s\n", TAG, client->id(), client->remoteIP().toString().c_str());  break;
-    case WS_EVT_DISCONNECT: Serial.printf("[%s] WebSocket client #%u disconnected\n", TAG, client->id()); break;
+    case WS_EVT_CONNECT: LOG("[%s] WebSocket client #%u connected from %s\n", TAG, client->id(), client->remoteIP().toString().c_str());  break;
+    case WS_EVT_DISCONNECT: LOG("[%s] WebSocket client #%u disconnected\n", TAG, client->id()); break;
     case WS_EVT_DATA: handleWebSocketMessage(arg, data, len); break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR: break;
@@ -910,29 +1052,29 @@ void web_server_init() {
     request->send(response);
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
     if(!index){
-      Serial.printf("[%s] Update Start: %s\n", TAG, filename.c_str());
+      LOG("[%s] Update Start: %s\n", TAG, filename.c_str());
       if (!Update.begin()) {
         std::string error = Update.errorString();
         sendAlert(error);
-        Serial.printf("[%s] %s\n", TAG, error.c_str());
+        LOG("[%s] %s\n", TAG, error.c_str());
       }
     }
     if(!Update.hasError()){
       if(Update.write(data, len) != len) {
         std::string error = Update.errorString();
         sendAlert(error);
-        Serial.printf("[%s] %s\n", TAG, error.c_str());
+        LOG("[%s] %s\n", TAG, error.c_str());
       }
     }
     if(final){
       if(Update.end(true)) {
         sendAlert("Обновление успешно завершено. Перезагрузите устройство.");
-        Serial.printf("[%s] Update Success: %uB\n", TAG, index+len);
+        LOG("[%s] Update Success: %uB\n", TAG, index+len);
       }
       else {
         std::string error = Update.errorString();
         sendAlert(error);
-        Serial.printf("[%s] %s\n", TAG, error.c_str());
+        LOG("[%s] %s\n", TAG, error.c_str());
       }
     }
   });
@@ -981,6 +1123,7 @@ void wifi_loop ( void * pvParameters ) {
 
 void setup() {
   Serial.begin(115200);
+  audioLogger = &Serial;
   /* Hardware setup */
   gpio_reset_pin(led_status);
   gpio_set_direction(led_status, GPIO_MODE_OUTPUT);
@@ -1042,24 +1185,24 @@ void setup() {
   /* System startup */
 
   device_status.line_status = l_status_close;
-  Serial.printf("[%s] %s\n", TAG, CONFIG_CHIP_DEVICE_PRODUCT_NAME);
-  Serial.printf("[%s] %s\n", TAG, CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION);
-  Serial.printf("[%s] %s\n", TAG, "System setup");
+  LOG("[%s] %s\n", TAG, CONFIG_CHIP_DEVICE_PRODUCT_NAME);
+  LOG("[%s] %s\n", TAG, CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION);
+  LOG("[%s] %s\n", TAG, "System setup");
   if (!aFS.begin(true)) {
-    Serial.printf("[%s] %s\n", TAG, "An Error has occurred while mounting file system.");
+    LOG("[%s] %s\n", TAG, "An Error has occurred while mounting file system.");
     hw_status.last_error = 6;
     return;
   }
-  Serial.printf("[%s] %s\n", TAG, "Settings init");
+  LOG("[%s] %s\n", TAG, "Settings init");
   settings_manager = new SettingsManager(SETTING_FILENAME);
   settings_manager->LoadSettings(aFS);
   if (currentAction == WAIT) gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable); 
-  Serial.printf("[%s] %s\n", TAG, "WiFi init");
+  LOG("[%s] %s\n", TAG, "WiFi init");
   wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
   if (!hw_status.web_services_init) web_server_init();
-  Serial.printf("[%s] %s\n", TAG, "Web services init complete");
-  xTaskCreatePinnedToCore(wifi_loop, "WiFi infinity loops", STACK_SIZE, NULL, tskIDLE_PRIORITY,  &wifiTask, tskNO_AFFINITY);
-  Serial.printf("[%s] %s\n", TAG, "WiFi monitor started");
+  LOG("[%s] %s\n", TAG, "Web services init complete");
+  xTaskCreatePinnedToCore(wifi_loop, "WiFi infinity loops", 4096, NULL, tskIDLE_PRIORITY,  &wifiTask, tskNO_AFFINITY);
+  LOG("[%s] %s\n", TAG, "WiFi monitor started");
   device_info = new DevInfo;
   device_info->name = CONFIG_CHIP_DEVICE_PRODUCT_NAME;
   device_info->manufacturer = "SCratORS";
@@ -1069,22 +1212,29 @@ void setup() {
   std::string txt = WiFi.macAddress().c_str();
   size_t index;
   while ((index = txt.find(":")) != std::string::npos) txt.replace(index, 1, "");
-  Serial.printf("[%s] MQTT ID: %s\n", TAG, txt.c_str());
+  LOG("[%s] MQTT ID: %s\n", TAG, txt.c_str());
   device_info->mqtt_entity_id = txt;
   device_info->dev_name = "smartintercom";
-  Serial.printf("[%s] %s\n", TAG, "System started.");
+  LOG("[%s] %s\n", TAG, "System started.");
 }
 
 void loop() {
-
   if (wifi_manager->Connected()) {
       if (!hw_status.time_configure) {
         ws.textAll(getStatus().c_str());
         sendAlert("Соединение с Wi-Fi Установлено!\nАдрес устройства: " + wifi_manager->ip);
+        enable_syslog(settings_manager->settings.syslog);
         enable_mqtt(settings_manager->settings.server_type == 1);
         enable_tlg(settings_manager->settings.server_type == 2);
         hw_status.time_configure = true; 
-      } 
+      }
+  } else {
+    if (hw_status.time_configure) {
+      enable_syslog(false);
+      enable_mqtt(false);
+      enable_tlg(false);
+      hw_status.time_configure = false;
+    }
   }
  
   if (currentAction != WAIT) doAction(millis()-detectMillis); 
@@ -1098,7 +1248,7 @@ void loop() {
             gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
             calling_detect();
           }
-          Serial.printf("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
+          LOG("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
         }
         syncCounter = false;
       }
@@ -1110,10 +1260,13 @@ if (!settings_manager->settings.child_lock) {
     if (btnState && !btnPressFlag && millis() - last_toggle > DEBOUNCE_DELAY) {
         btnPressFlag = true;
         last_toggle = millis();
-        if (hw_status.last_error) hw_status.last_error = 0;
-        else if (settings_manager && settings_manager->last_error) settings_manager->last_error = 0;
-        else if (wifi_manager && wifi_manager->last_error) wifi_manager->last_error = 0;
-        else setAccept(!settings_manager->settings.accept_call);
+        if (currentAction == CALLING) setAccept(settings_manager->settings.accept_call = true);
+        else {
+          if (hw_status.last_error) hw_status.last_error = 0;
+          else if (settings_manager->last_error) settings_manager->last_error = 0;
+          else if (wifi_manager && wifi_manager->last_error) wifi_manager->last_error = 0;
+          else setAccept(!settings_manager->settings.accept_call);
+        } 
     }
     if (btnState && btnPressFlag && millis() - last_toggle > LONGPRESS_DELAY) {
         last_toggle = millis();
