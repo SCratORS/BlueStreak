@@ -6,7 +6,7 @@
 #define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
 #define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
 #define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.1.9-Web Insider Preview 04.2025 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.2.1-Web Insider Preview 04.2025 Firmware"
 #define COPYRIGHT "© SCHome (SmartHome Devices), 2025"
 #define modes_name "Постоянный режим работы"
 #define sound_name "Аудиосообщения"
@@ -83,6 +83,7 @@ class SettingsManager {
             std::string access_code = "";
             std::string user_login = "";
             std::string user_passwd = "";
+            std::string dev_name = "smartintercom";
             bool web_auth = false;
             bool child_lock = false;
             bool mqtt_retain = true;
@@ -127,6 +128,7 @@ class SettingsManager {
         std::string setSysLogPort(uint16_t value);
         std::string setSysLogServer(std::string value);
         std::string setForceOpen(bool value);
+        std::string setDevName(std::string value);
 
     private:
         JsonDocument json;

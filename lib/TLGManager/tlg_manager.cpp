@@ -355,33 +355,62 @@ bool TLGManager::begin() {
 void TLGManager::getUpdate() {
     if (!update_loop) return;
     _await = true;
-    json.clear();
-    json["method"] = "getUpdates";
-    json["timeout"] = 60;
-    json["offset"] = update_id + 1;
-    serializeJson(json, request);
-    JsonDocument responce;
-    deserializeJson(responce, (char*)post(request).c_str());
-    if ((responce!="") && (responce["ok"].as<bool>())) {
-        last_error = 0;
-        JsonDocument results = responce["result"];
-        uint8_t result_count = results.size();
-        for (uint8_t r = 0; r < result_count; r++) {
-            JsonDocument result = results[r];
-            update_id = result["update_id"].as<uint64_t>();
-            if (!result["message"].isNull()) {
-                JsonDocument msg = result["message"];
-                message(msg["from"]["id"].as<std::string>(), msg["chat"]["id"].as<std::string>(), msg["text"].as<std::string>(), msg["from"]["username"].as<std::string>());
+    if (ping) {
+        if (millis() - timer > 15000) {
+            LOG("[%s] Check ping connection to api.telegram.org #%d\n", TAG, after_ping);
+            timer = millis();
+            ping = !Ping.ping("api.telegram.org");
+            after_ping++;
+            if (ping) {
+                LOG("[%s] Checking ping connection Failure. Awaiting 15 seconds.\n", TAG);
+                if (after_ping > 10) {
+                    LOG("[%s] Internet connection lost. Need restart.\n", TAG);
+                    ESP.restart();
+                }
+            } else LOG("[%s] Checking ping connection Success. Reconnect telegram client.\n", TAG);
+        }
+    } else {
+        json.clear();
+        json["method"] = "getUpdates";
+        json["timeout"] = 60;
+        json["offset"] = update_id + 1;
+        serializeJson(json, request);
+        JsonDocument responce;
+        deserializeJson(responce, (char*)post(request).c_str());
+        if ((responce!="") && (responce["ok"].as<bool>())) {
+            last_error = 0;
+            after_ping = 0;
+            JsonDocument results = responce["result"];
+            uint8_t result_count = results.size();
+            for (uint8_t r = 0; r < result_count; r++) {
+                JsonDocument result = results[r];
+                update_id = result["update_id"].as<uint64_t>();
+                if (!result["message"].isNull()) {
+                    JsonDocument msg = result["message"];
+                    message(msg["from"]["id"].as<std::string>(), msg["chat"]["id"].as<std::string>(), msg["text"].as<std::string>(), msg["from"]["username"].as<std::string>());
+                }
+                if (!result["callback_query"].isNull()) {
+                    JsonDocument query = result["callback_query"];
+                    std::string id = query["id"].as<std::string>();
+                    menu_id = query["message"]["message_id"].as<uint64_t>();
+                    uint8_t repeat = 3;
+                    callback_query(query["from"]["id"].as<std::string>(), query["message"]["chat"]["id"].as<std::string>(), query["data"].as<std::string>());
+                    while (!answerCallbackQuery(id) && repeat--){};
+                }
             }
-            if (!result["callback_query"].isNull()) {
-                JsonDocument query = result["callback_query"];
-                std::string id = query["id"].as<std::string>();
-                menu_id = query["message"]["message_id"].as<uint64_t>();
-                uint8_t repeat = 3;
-                callback_query(query["from"]["id"].as<std::string>(), query["message"]["chat"]["id"].as<std::string>(), query["data"].as<std::string>());
-                while (!answerCallbackQuery(id) && repeat--){};
+        } else {
+            LOG("[%s] GetUpdate failed #%d. Start checking ping connection to api.telegram.org every 15 seconds.\n", TAG, after_ping);
+            last_error = 5;
+            timer = millis();
+            if (after_ping > 10) {
+                LOG("[%s] Telegram client incorrect. Need restart.\n", TAG);
+                ESP.restart();
+            } else {
+                https_client->setReuse(false);
+                https_client_post->setReuse(false);
+                ping = true;
             }
         }
-    } else last_error = 5;
+    }
     _await = false;
 }

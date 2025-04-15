@@ -24,6 +24,7 @@ void SettingsManager::CheckDefault() {
     if (settings.user_login == "null") settings.user_login = "";
     if (settings.user_passwd == "null") settings.user_passwd = "";
     if (settings.syslog_server == "null") settings.syslog_server = "";
+    if (settings.dev_name == "null") settings.dev_name = "smartintercom";
     if (settings.syslog_port == 0) settings.syslog_port = 514;
     if (settings.delay_before == 0) settings.delay_before = 1000;
     if (settings.delay_before == 0) settings.delay_before = 1000;
@@ -83,6 +84,7 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.syslog_port = json["syslog_port"].as<uint16_t>();
         settings.syslog_server = json["syslog_server"].as<std::string>();
         settings.force_open = json["force_open"].as<bool>();
+        settings.dev_name = json["dev_name"].as<std::string>();
         CheckDefault();
         last_error = 0;
     }
@@ -134,6 +136,7 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["syslog_port"] = settings.syslog_port;
         json["syslog_server"] = settings.syslog_server;
         json["force_open"] = settings.force_open;
+        json["dev_name"] = settings.dev_name;
         serializeJson(json, file);
         last_error = 0;
   }
@@ -180,6 +183,7 @@ void SettingsManager::ResetSettings() {
     settings.syslog_port = 514;
     settings.syslog_server = "";
     settings.force_open = false;
+    settings.dev_name = "smartintercom";
     last_error = 0;
 }
 
@@ -222,6 +226,7 @@ std::string SettingsManager::getSettings(){
     json["syslog_port"] = settings.syslog_port;
     json["syslog_server"] = settings.syslog_server;
     json["force_open"] = settings.force_open;
+    json["dev_name"] = settings.dev_name;
     serializeJson(json, message);
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
@@ -472,6 +477,15 @@ std::string SettingsManager::setMQTTPassword(std::string value) {
     settings.mqtt_passwd = value;
     json.clear();
     json["mqtt_passwd"] = settings.mqtt_passwd;
+    serializeJson(json, message);
+    LOG("[%s] %s\n", TAG, message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setDevName(std::string value) {
+    settings.dev_name = value;
+    json.clear();
+    json["dev_name"] = settings.dev_name;
     serializeJson(json, message);
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
