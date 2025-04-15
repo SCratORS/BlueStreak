@@ -25,11 +25,11 @@
 
 static const char* TAG = "MAIN";
 std::string mode_name[3] = {"Не активен","Сброс вызова","Открывать всегда"}; 
-enum GeneratorType {WAV, MP3, UNK};
 enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, SWCLOSE, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
 static uint8_t currentAction = WAIT;
 static uint32_t detectMillis = 0;
 static uint32_t audioLength = 0;
+static uint64_t tlg_restart_timer;
 
 static AudioOutputI2S *audioOut = new AudioOutputI2S(0, AudioOutputI2S::INTERNAL_DAC);
 static AudioGenerator *audioPlayer;
@@ -114,27 +114,6 @@ void LOG(const char * format, ...) {
     if (syslog) syslog->log(temp);
     Serial.printf("[%d] ", millis());
     Serial.print(temp);
-}
-
-const GeneratorType get_file_type_(const char *filename) {
-  const char *dot = strrchr(filename, '.');
-  if (!dot) {
-      return UNK;
-  }
-  dot++;
-  if ((dot[0] == 'w' || dot[0] == 'W') &&
-      (dot[1] == 'a' || dot[1] == 'A') &&
-      (dot[2] == 'v' || dot[2] == 'V') &&
-      (dot[3] == 0)) {
-      return WAV;
-  }
-  if ((dot[0] == 'm' || dot[0] == 'M') &&
-      (dot[1] == 'p' || dot[1] == 'P') && 
-      (dot[2] == '3') && 
-      (dot[3] == 0)) {
-      return MP3;
-  }
-  return UNK;
 }
 
 void mqtt_publish_once_actions(){
@@ -338,16 +317,18 @@ void phone_disable_action () {
 }
 
 bool initAudio(const char * filename) {
-  if (aFS.exists(String(filename) + ".mp3")) {
-    audioFile = new AudioFileSourceLittleFS((String(filename) + ".mp3").c_str());
-    if (audioFile) {
-        audioPlayer = new AudioGeneratorMP3();
-        if (audioPlayer && audioPlayer->begin(audioFile, audioOut)) {
-          audioLength = millis();
-          return true;
-        }
+  if (settings_manager->settings.server_type < 2) {
+    if (aFS.exists(String(filename) + ".mp3")) {
+      audioFile = new AudioFileSourceLittleFS((String(filename) + ".mp3").c_str());
+      if (audioFile) {
+          audioPlayer = new AudioGeneratorMP3();
+          if (audioPlayer && audioPlayer->begin(audioFile, audioOut)) {
+            audioLength = millis();
+            return true;
+          }
+      }
     }
-  } 
+  }
   if (aFS.exists(String(filename) + ".wav")) {
     audioFile = new AudioFileSourceLittleFS((String(filename) + ".wav").c_str());
     if (audioFile) {
@@ -503,6 +484,10 @@ void setMode(uint8_t value) {
 
 void setRoom(uint8_t value) {
   ws.textAll(settings_manager->setAddressCounter(value).c_str());
+}
+
+void setDevName(std::string value) {
+  ws.textAll(settings_manager->setDevName(value).c_str());
 }
 
 void setSysLogPort(uint16_t value) {
@@ -906,6 +891,9 @@ void onRequest(AsyncWebServerRequest *request){
 void onBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){}
 void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){ 
   if (!index) {
+    String f_name = filename.substring(0, filename.lastIndexOf("."));
+    if (aFS.exists("/media/" + f_name + ".mp3")) aFS.remove("/media/" + f_name + ".mp3");
+    if (aFS.exists("/media/" + f_name + ".wav")) aFS.remove("/media/" + f_name + ".wav");
     request->_tempFile = aFS.open("/media/" + filename, "w");
     LOG("[%s] Start upload file %s\n", TAG, filename.c_str());
   }
@@ -953,6 +941,11 @@ void onREST(AsyncWebServerRequest *request) {
       if (p->name() == "send") {
         if (p->value() != "")
         json["send"] = tlg_manager->enabled()?(tlg_manager->sendMessage(settings_manager->settings.tlg_user, p->value().c_str(), true)?"ok":"error"):"telegram not active";
+        continue;
+      }
+      if (p->name() == "mqtt_name") {
+        if (p->value() != "") setDevName(p->value().c_str());
+        json["mqtt_name"] = settings_manager->settings.dev_name;
         continue;
       }
       if (p->name() == "mute") {
@@ -1205,7 +1198,7 @@ void setup() {
   LOG("[%s] %s\n", TAG, "WiFi monitor started");
   device_info = new DevInfo;
   device_info->name = CONFIG_CHIP_DEVICE_PRODUCT_NAME;
-  device_info->manufacturer = "SCratORS";
+  device_info->manufacturer = "SCratORS © SCHome (SmartHome Devices)";
   device_info->product = CONFIG_CHIP_DEVICE_PRODUCT_NAME;
   device_info->firmware = CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION;
   device_info->control = "http://"+wifi_manager->ip;
@@ -1214,7 +1207,7 @@ void setup() {
   while ((index = txt.find(":")) != std::string::npos) txt.replace(index, 1, "");
   LOG("[%s] MQTT ID: %s\n", TAG, txt.c_str());
   device_info->mqtt_entity_id = txt;
-  device_info->dev_name = "smartintercom";
+  device_info->dev_name = settings_manager->settings.dev_name;
   LOG("[%s] %s\n", TAG, "System started.");
 }
 
@@ -1226,7 +1219,18 @@ void loop() {
         enable_syslog(settings_manager->settings.syslog);
         enable_mqtt(settings_manager->settings.server_type == 1);
         enable_tlg(settings_manager->settings.server_type == 2);
+        tlg_restart_timer = millis();
         hw_status.time_configure = true; 
+      } else {
+        if (settings_manager->settings.server_type == 2) {
+          if (!tlg_manager) {
+            if (millis() - tlg_restart_timer > 120000) {
+              LOG("[%s] Restart telegram client.\n", TAG);
+              enable_tlg(settings_manager->settings.server_type == 2);
+              tlg_restart_timer = millis();
+            }
+          }
+        }
       }
   } else {
     if (hw_status.time_configure) {

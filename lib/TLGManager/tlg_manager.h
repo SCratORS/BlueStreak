@@ -1,6 +1,7 @@
 #include "stdint.h"
 #include <string>
 #include <HTTPClient.h>
+#include <ESP32Ping.h>
 #include "settings_manager.h"
 
 class TLGManager {
@@ -39,6 +40,9 @@ class TLGManager {
         bool tlg_started = false;
         bool update_loop = false;
         bool _await = false;
+        bool ping = false;
+        uint8_t after_ping = 0;
+        uint64_t timer;
         uint64_t update_id = 0;
         bool getMe();
         bool setMyCommands();
