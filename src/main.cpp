@@ -30,6 +30,7 @@ static uint8_t currentAction = WAIT;
 static uint32_t detectMillis = 0;
 static uint32_t audioLength = 0;
 static uint64_t tlg_restart_timer;
+static uint64_t reboot_timeout;
 
 static AudioOutputI2S *audioOut = new AudioOutputI2S(0, AudioOutputI2S::INTERNAL_DAC);
 static AudioGenerator *audioPlayer;
@@ -498,6 +499,10 @@ void setSysLogServer(std::string value) {
   ws.textAll(settings_manager->setSysLogServer(value).c_str());
 }
 
+void setRebootTimeout(uint8_t value) {
+  ws.textAll(settings_manager->setRebootTimeout(value).c_str());
+}
+
 void setAccept(bool value) {
   ws.textAll(settings_manager->setAccept(value).c_str());
   mqtt_publish_once_actions();
@@ -825,6 +830,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setDelayFilter") { ws.textAll(settings_manager->setDelayFilter(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setCallEndDelay") { ws.textAll(settings_manager->setCallEndDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setGreetingDelay") { ws.textAll(settings_manager->setGreetingDelay(doc["value"].as<uint16_t>()).c_str()); return; }
+    if (doc["method"] == "setRebootTimeout") { setRebootTimeout(doc["value"].as<uint8_t>()); return; }
     if (doc["method"] == "setLed")      { setLed(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setRoom")     { setRoom(doc["value"].as<uint8_t>()); return; }
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
@@ -909,13 +915,18 @@ void onREST(AsyncWebServerRequest *request) {
   json.clear();
   uint8_t params = request->params();
   for(uint8_t i=0;i<params;i++){
-    AsyncWebParameter* p = request->getParam(i);
+    const AsyncWebParameter* p = request->getParam(i);
     if(p->isFile()){
       request->send(404);
     } else {
       if (p->name() == "ftp") {
         if (p->value() != "") ws.textAll(enable_ftp_server(p->value() == "true").c_str());
         json["ftp"] = settings_manager->settings.ftp;
+        continue;
+      }
+      if (p->name() == "reboot_timeout") {
+        if (p->value() != "") setRebootTimeout(atoi(p->value().c_str()));
+        json["reboot_timeout"] = settings_manager->settings.reboot_timeout;
         continue;
       }
       if (p->name() == "force_open") {
@@ -1098,6 +1109,12 @@ TaskHandle_t wifiTask;
 void wifi_loop ( void * pvParameters ) {   
     while (wifi_manager) { 
       wifi_manager->handle();
+      if (!wifi_manager->Connected()) {
+        if (settings_manager->settings.reboot_timeout) {
+          if (!reboot_timeout) reboot_timeout = millis() + (settings_manager->settings.reboot_timeout * 60000);
+          else if (millis() > reboot_timeout) ESP.restart();
+        }
+      } else reboot_timeout = 0;
       if (settings_manager->settings.server_type == 1 && mqtt_manager) mqtt_manager->handle();
       if (settings_manager->settings.server_type == 2 && tlg_manager) {
         if (  settings_manager->settings.access_code != "" &&
