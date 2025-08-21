@@ -35,6 +35,7 @@ void SettingsManager::CheckDefault() {
     if (settings.greeting_delay == 0) settings.greeting_delay = 1000;
     if (settings.delay_system == 0) settings.delay_system = 500;
     if (settings.mqtt_port == 0) settings.mqtt_port = 1883;
+    if (settings.counter_duration == 0) settings.counter_duration = 190;
 }
 
 void SettingsManager::LoadSettings(fs::FS aFS) {
@@ -85,6 +86,8 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.syslog_server = json["syslog_server"].as<std::string>();
         settings.force_open = json["force_open"].as<bool>();
         settings.dev_name = json["dev_name"].as<std::string>();
+        settings.reboot_timeout = json["reboot_timeout"].as<uint8_t>();
+        settings.counter_duration = json["counter_duration"].as<uint16_t>();
         CheckDefault();
         last_error = 0;
     }
@@ -137,6 +140,8 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["syslog_server"] = settings.syslog_server;
         json["force_open"] = settings.force_open;
         json["dev_name"] = settings.dev_name;
+        json["reboot_timeout"] = settings.reboot_timeout;
+        json["counter_duration"] = settings.counter_duration;
         serializeJson(json, file);
         last_error = 0;
   }
@@ -184,6 +189,8 @@ void SettingsManager::ResetSettings() {
     settings.syslog_server = "";
     settings.force_open = false;
     settings.dev_name = "smartintercom";
+    settings.reboot_timeout = 0;
+    settings.counter_duration = 190;
     last_error = 0;
 }
 
@@ -227,6 +234,8 @@ std::string SettingsManager::getSettings(){
     json["syslog_server"] = settings.syslog_server;
     json["force_open"] = settings.force_open;
     json["dev_name"] = settings.dev_name;
+    json["reboot_timeout"] = settings.reboot_timeout;
+    json["counter_duration"] = settings.counter_duration;
     serializeJson(json, message);
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
@@ -581,6 +590,24 @@ std::string SettingsManager::setSysLogServer(std::string value) {
     settings.syslog_server = value;
     json.clear();
     json["syslog_server"] = settings.syslog_server;
+    serializeJson(json, message);
+    LOG("[%s] %s\n", TAG, message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setRebootTimeout(uint8_t value) {
+    settings.reboot_timeout = value;
+    json.clear();
+    json["reboot_timeout"] = settings.reboot_timeout;
+    serializeJson(json, message);
+    LOG("[%s] %s\n", TAG, message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setCounterDuration(uint16_t value) {
+    settings.counter_duration = value;
+    json.clear();
+    json["counter_duration"] = settings.counter_duration;
     serializeJson(json, message);
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;

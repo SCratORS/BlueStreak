@@ -7,6 +7,8 @@ WiFiManager::WiFiManager(std::string ssid, std::string passwd) {
     this->ssid = ssid;
     this->passwd = passwd;
     last_error = 1;
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    WiFi.setHostname(CONFIG_CHIP_DEVICE_PRODUCT_NAME);
     handle();
 }
 
