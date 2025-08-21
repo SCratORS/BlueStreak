@@ -12,6 +12,7 @@ TLGManager::TLGManager(HTTPClient * https_client, HTTPClient * https_client_post
     host = "";
     menu_id = 0;
     update_id = 0;
+    responce_error_counter = 0;
 }
 
 TLGManager::~TLGManager() {
@@ -40,6 +41,17 @@ std::string TLGManager::post(std::string content, bool force) {
     }
     LOG("[%s] post responce: %s\n", TAG, responce.c_str());
     if (force) update_loop = tlg_started;
+    if (responce == "") {
+        last_error = 5;
+        LOG("[%s] Responce filed %d. \n", TAG, content.c_str());
+        if (++responce_error_counter > 9) {
+            LOG("[%s] Post responce incorrect. Need restart.\n", TAG);
+            ESP.restart();
+        }
+    } else {
+        last_error = 0;
+        responce_error_counter = 0;
+    }
     return responce;
 }
 
@@ -308,6 +320,10 @@ bool TLGManager::sendMessage(std::string chat_id, std::string message, bool forc
         if (mode != "") json["parse_mode"] = mode.c_str();
         std::string request;
         serializeJson(json, request);
+        if (request == "") {
+            LOG("[%s] Json #0 serialize error. Empty request. System will restart.\n", TAG);
+            ESP.restart();
+        }
         JsonDocument responce;
         deserializeJson(responce, (char*)post(request, force).c_str());
         result = (responce!="") && (responce["ok"].as<bool>());
@@ -321,6 +337,10 @@ bool TLGManager::sendMessage(std::string chat_id, std::string message, bool forc
     if (mode != "") json["parse_mode"] = mode.c_str();
     std::string request;
     serializeJson(json, request);
+    if (request == "") {
+        LOG("[%s] Json #1 serialize error. Empty request. System will restart.\n", TAG);
+        ESP.restart();
+    }
     JsonDocument responce;
     deserializeJson(responce, (char*)post(request, force).c_str());
     return result && (responce!="") && (responce["ok"].as<bool>());
@@ -364,7 +384,7 @@ void TLGManager::getUpdate() {
             if (ping) {
                 LOG("[%s] Checking ping connection Failure. Awaiting 15 seconds.\n", TAG);
                 if (after_ping > 10) {
-                    LOG("[%s] Internet connection lost. Need restart.\n", TAG);
+                    LOG("[%s] Internet connection lost. System will restart.\n", TAG);
                     ESP.restart();
                 }
             } else LOG("[%s] Checking ping connection Success. Reconnect telegram client.\n", TAG);
@@ -403,7 +423,7 @@ void TLGManager::getUpdate() {
             last_error = 5;
             timer = millis();
             if (after_ping > 10) {
-                LOG("[%s] Telegram client incorrect. Need restart.\n", TAG);
+                LOG("[%s] Telegram client incorrect. System will restart.\n", TAG);
                 ESP.restart();
             } else {
                 https_client->setReuse(false);

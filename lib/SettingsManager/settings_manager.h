@@ -6,7 +6,7 @@
 #define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
 #define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
 #define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.2.1-Web Insider Preview 04.2025 Firmware"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.2.4-Web Insider Preview 08.2025 Firmware"
 #define COPYRIGHT "© SCHome (SmartHome Devices), 2025"
 #define modes_name "Постоянный режим работы"
 #define sound_name "Аудиосообщения"
@@ -89,6 +89,8 @@ class SettingsManager {
             bool mqtt_retain = true;
             uint16_t access_code_lifetime = 0;
             uint8_t address_counter = 0;
+            uint8_t reboot_timeout = 0;
+            uint16_t counter_duration = 190;
         } settings;
         std::string getSettings();
         std::string setMode(uint8_t value);
@@ -129,6 +131,8 @@ class SettingsManager {
         std::string setSysLogServer(std::string value);
         std::string setForceOpen(bool value);
         std::string setDevName(std::string value);
+        std::string setRebootTimeout(uint8_t value);
+        std::string setCounterDuration(uint16_t value);
 
     private:
         JsonDocument json;

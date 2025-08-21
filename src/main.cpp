@@ -89,6 +89,7 @@ static uint8_t ledErrorCounter = 0;
 static int16_t currentAddressCounter = 0;
 static bool syncCounter = false;
 static bool triggerCounter = false;
+static bool finishCounter = false;
 
 void LOG(const char * format, ...) {
     char loc_buf[64];
@@ -292,22 +293,48 @@ void calling_detect() {
   }
 }
 
-void call_detector_enable() {
+
+uint64_t last_time_detect = 0;
+void IRAM_ATTR call_detector_isr() {
+  if (gpio_get_level(detect_line)) {
+    last_time_detect = millis();
+    return;
+  }
+  /*
+  reset_time = millis();
+  if (settings_manager->settings.address_counter) {
+    if (reset_time - last_time_detect > 200) syncCounter = !syncCounter;
+    if (currentAction == WAIT) {
+      if (syncCounter) {
+        finishCounter = false;
+        currentAddressCounter = 0;
+        pcnt_counter_clear(PCNT_UNIT_0);
+      }
+    }
+    if (currentAction == CALLING) {
+      if (!syncCounter && finishCounter && !triggerCounter) currentAction = RESET;
+    }
+  } else {
+    if (currentAction == WAIT) calling_detect();
+  }
+*/
   reset_time = millis();
   if (currentAction == WAIT) {
     if (settings_manager->settings.address_counter) {
       if (!syncCounter) {
+        syncCounter = true;
         currentAddressCounter = 0;
         pcnt_counter_clear(PCNT_UNIT_0);
-        syncCounter = true;
+        finishCounter = false;
       }
     } else calling_detect();
   }
   if (currentAction == CALLING) {
     if (settings_manager->settings.address_counter) {
-      if (!syncCounter && triggerCounter) currentAction = RESET;
+      if (!syncCounter && finishCounter && !triggerCounter) currentAction = RESET;
     }
   }
+
 }
 
 void phone_disable_action () {
@@ -503,9 +530,18 @@ void setRebootTimeout(uint8_t value) {
   ws.textAll(settings_manager->setRebootTimeout(value).c_str());
 }
 
+void setCounterDuration(uint16_t value) {
+  ws.textAll(settings_manager->setCounterDuration(value).c_str());
+}
+
 void setAccept(bool value) {
   ws.textAll(settings_manager->setAccept(value).c_str());
   mqtt_publish_once_actions();
+  if (value && currentAction == CALLING) {
+    currentAction = CALL;
+    detectMillis = millis(); 
+    timerAction += settings_manager->settings.delay_system;  
+  }
 }
 
 void setDelivery(bool value) {
@@ -831,6 +867,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setCallEndDelay") { ws.textAll(settings_manager->setCallEndDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setGreetingDelay") { ws.textAll(settings_manager->setGreetingDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setRebootTimeout") { setRebootTimeout(doc["value"].as<uint8_t>()); return; }
+    if (doc["method"] == "setCounterDuration") {setCounterDuration(doc["value"].as<uint16_t>()); return;}
     if (doc["method"] == "setLed")      { setLed(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setRoom")     { setRoom(doc["value"].as<uint8_t>()); return; }
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
@@ -929,6 +966,13 @@ void onREST(AsyncWebServerRequest *request) {
         json["reboot_timeout"] = settings_manager->settings.reboot_timeout;
         continue;
       }
+
+      if (p->name() == "counter_duration") {
+        if (p->value() != "") setCounterDuration(atoi(p->value().c_str()));
+        json["counter_duration"] = settings_manager->settings.counter_duration;
+        continue;
+      }
+
       if (p->name() == "force_open") {
         if (p->value() != "") ws.textAll(enable_force_open(p->value() == "true").c_str());
         json["force_open"] = settings_manager->settings.force_open;
@@ -1003,6 +1047,10 @@ void onREST(AsyncWebServerRequest *request) {
       if (p->name() == "mode") {
         if (p->value() != "") setMode(atoi(p->value().c_str()));
         json["modes"] = settings_manager->settings.modes;
+        continue;
+      }
+      if (p->name() == "uptime") {
+        json["uptime"] = millis();
         continue;
       }
       if (p->name() == "restart" || p->name() == "reboot") {
@@ -1179,13 +1227,12 @@ void setup() {
   };
 
   pcnt_unit_config(&pcnt_config);
-  pcnt_set_filter_value(PCNT_UNIT_0, 100);
+  pcnt_set_filter_value(PCNT_UNIT_0, 100); //Добавить в api!!!!
   pcnt_filter_enable(PCNT_UNIT_0);
   pcnt_counter_pause(PCNT_UNIT_0);
   pcnt_counter_clear(PCNT_UNIT_0);
   pcnt_counter_resume(PCNT_UNIT_0);
-  attachInterrupt(detect_line, call_detector_enable, FALLING);
-
+  attachInterrupt(detect_line, call_detector_isr, CHANGE);
   audioOut->SetOutputModeMono(true);
   timer0 = timerBegin(0, 80, true); // 12,5 ns * 80 = 1000ns = 1us
   timerAttachInterrupt(timer0, &TimerHandler0, false); //edge interrupts do not work, use false
@@ -1258,6 +1305,7 @@ void loop() {
     }
   }
  
+/*
   if (currentAction != WAIT) doAction(millis()-detectMillis); 
   else if (settings_manager->settings.address_counter) {
     if (syncCounter) {
@@ -1275,6 +1323,30 @@ void loop() {
       }
     }
   }
+*/
+  if (currentAction != WAIT) doAction(millis()-detectMillis); 
+  else if (settings_manager->settings.address_counter) {
+    if (syncCounter && !finishCounter) {
+      if (millis() - reset_time > settings_manager->settings.counter_duration) {
+        pcnt_get_counter_value(PCNT_UNIT_0, &currentAddressCounter);
+        finishCounter = true;
+        if (currentAddressCounter) {
+          triggerCounter = settings_manager->settings.address_counter == currentAddressCounter;
+          if (triggerCounter) {
+            gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
+            calling_detect();
+          }
+          LOG("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
+        } else LOG("[%s] Select address: %d, counter: not detect\n", TAG, settings_manager->settings.address_counter);
+      }
+    } else if (finishCounter) {
+      if (millis() - reset_time > settings_manager->settings.counter_duration) {
+        syncCounter = false;
+        finishCounter = false;
+      }
+    }
+  }
+
 
 if (!settings_manager->settings.child_lock) {
     bool btnState = !gpio_get_level(button_boot);
