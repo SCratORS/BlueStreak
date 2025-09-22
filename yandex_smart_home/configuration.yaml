@@ -3,9 +3,6 @@ script: !include scripts.yaml
 template: !include templates.yaml
 
 yandex_smart_home:
-  filter:
-    include_entities:
-      - binary_sensor.smartintercom_state # домофон
   entity_config:
     binary_sensor.smartintercom_state:
       name: Домофон
@@ -47,4 +44,5 @@ yandex_smart_home:
             entity_id: switch.smartintercom_sound
           turn_off:
             service: switch.turn_on
+
             entity_id: switch.smartintercom_sound
