@@ -1,0 +1,17 @@
+script:
+  smartintercom_mode_set:
+    alias: Домофон (установка режима)
+    mode: queued
+    sequence:
+    - service: select.select_option
+      entity_id: select.smartintercom_modes
+      data:
+        option: >
+          {% if mode == "normal" %}
+            Не активен
+          {% elif mode == "auto" %}
+            Открывать всегда
+          {% else %}
+            Сброс вызова
+          {% endif %}
+    

@@ -1,0 +1,50 @@
+sensor: !include sensors.yaml
+script: !include scripts.yaml
+template: !include templates.yaml
+
+yandex_smart_home:
+  filter:
+    include_entities:
+      - binary_sensor.smartintercom_state # домофон
+  entity_config:
+    binary_sensor.smartintercom_state:
+      name: Домофон
+      room: Прихожая
+      type: devices.types.openable
+      modes:
+        program:
+          normal: [normal]
+          quiet: [quiet]
+          auto: [auto]
+      custom_modes:
+        program:
+          state_entity_id: sensor.smartintercom_modes
+          set_mode:
+            service: script.smartintercom_mode_set
+            data:
+              mode: '{{ mode }}'
+      custom_toggles:
+        controls_locked:
+          state_entity_id: sensor.smartintercom_accept_call_invert
+          turn_on:
+            service: switch.turn_off
+            entity_id: switch.smartintercom_accept_call
+          turn_off:
+            service: switch.turn_on
+            entity_id: switch.smartintercom_accept_call
+        backlight:
+          state_entity_id: switch.smartintercom_led
+          turn_on:
+            service: switch.turn_on
+            entity_id: switch.smartintercom_led
+          turn_off:
+            service: switch.turn_off
+            entity_id: switch.smartintercom_led
+        mute:
+          state_entity_id: sensor.smartintercom_sound_invert
+          turn_on:
+            service: switch.turn_off
+            entity_id: switch.smartintercom_sound
+          turn_off:
+            service: switch.turn_on
+            entity_id: switch.smartintercom_sound

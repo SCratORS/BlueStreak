@@ -1,0 +1,9 @@
+- binary_sensor:
+  - name: "smartintercom state"
+    device_class: "door"
+    state: >
+      {% if is_state("switch.smartintercom_accept_call", "on") or is_state("select.smartintercom_modes", "Открывать всегда") %}
+        on
+      {% else %}
+        off
+      {% endif %}

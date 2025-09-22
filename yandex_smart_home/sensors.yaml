@@ -1,0 +1,25 @@
+- platform: template
+  sensors:
+    smartintercom_modes:
+      value_template: >
+        {% if is_state('select.smartintercom_modes', 'Не активен') %}
+          normal
+        {% elif is_state('select.smartintercom_modes', 'Открывать всегда') %}
+          auto
+        {% else %}
+          quiet
+        {% endif %}
+    smartintercom_sound_invert:
+      value_template: >
+        {% if is_state("switch.smartintercom_sound", "on") %}
+          off
+        {% else %}
+          on
+        {% endif %}
+    smartintercom_accept_call_invert:
+      value_template: >
+        {% if is_state("switch.smartintercom_accept_call", "on") %}
+          off
+        {% else %}
+          on
+        {% endif %}
