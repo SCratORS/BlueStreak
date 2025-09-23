@@ -44,5 +44,4 @@ yandex_smart_home:
             entity_id: switch.smartintercom_sound
           turn_off:
             service: switch.turn_on
-
             entity_id: switch.smartintercom_sound
