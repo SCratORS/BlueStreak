@@ -13,5 +13,3 @@ smartintercom_mode_set:
         {% else %}
           Сброс вызова
         {% endif %}
-
-    
