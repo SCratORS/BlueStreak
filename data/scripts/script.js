@@ -231,6 +231,7 @@ function uploadMedia(element) {
   if (element.id == 'greeting_allowed') progress = 'greeting_allowed_progress';
   if (element.id == 'delivery_allowed') progress = 'delivery_allowed_progress';
   if (element.id == 'access_denied') progress = 'access_denied_progress';
+  if (element.id == 'ringtone_file') progress = 'ringtone_progress';
 
   progressBarPanel = document.getElementById(progress);
   progressBarPanel.hidden = false;

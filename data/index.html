@@ -60,6 +60,13 @@
           <span class="slider round"></span>
         </label>
       </div>
+      <div class="panel line"></div>
+      <button class="button text control" onclick="sendCommand('open', null)">
+        <div class="button-icon">      
+          <div class = "icon icon_open"></div><div class = "btn-text">Открыть сейчас</div>
+        </div>
+      </button>
+      
     </div>
   </div>
 
@@ -158,7 +165,7 @@
         </label>
       </div>
       <div class = "panel top control add-margin no-padding-bottom">
-        <div class = "icon icon_volume-high"></div>
+        <div class = "icon icon_microphone"></div>
         <div class = "text">Аудиосообщение<div class = "text sub-title">Воспроизводить аудиофайлы на блок вызова</div></div>
         <label class="switch">
           <input id="sound" type="checkbox" title="sound" placeholder="" onclick="sendCommand('setSound',this.checked)">
@@ -174,7 +181,15 @@
         </label>
       </div>
       <div class = "panel top control add-margin no-padding-bottom">
-        <div class = "icon icon_bell-off"></div>
+        <div class = "icon icon_bell_ring"></div>
+        <div class = "text">Рингтон<div class = "text sub-title">Воспроизводить рингтон на блок вызова COMMAX</div></div>
+        <label class="switch">
+          <input id="ringtone" type="checkbox" title="ringtone" placeholder="" onclick="sendCommand('setRingtone',this.checked)">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <div class = "panel top control add-margin no-padding-bottom">
+        <div class = "icon icon_volume_off"></div>
         <div class = "text">Беззвучный режим<div class = "text sub-title">Отключать физическую трубку при вызове</div></div>
         <label class="switch">
           <input id="mute" type="checkbox" title="mute" placeholder="" onclick="sendCommand('setMute',this.checked)">
@@ -408,6 +423,18 @@
         </div>
       </div>
       <div id="access_denied_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
+      <div class = "panel top control add-margin-top no-padding-bottom ">
+        <div class = "icon icon_mp3"></div>
+        <div class = "text">Аудиофайл рингтона<div class = "text sub-title">Воспроизводимый при определении вызова</div></div>
+        <div class = "horizontal-grid right">
+          <input type="file" id="ringtone_file" accept=".mp3, .wav" hidden onchange="uploadMedia(this);">
+          <audio id="ringtone_play" src="" type="audio/mpeg"></audio>   
+          <button id="ringtone_play_btn_play" class="flat_button right" onclick="document.getElementById('ringtone_play').play();" hidden><div class = "flat_icon icon_play"></div></button>
+          <button id="ringtone_play_btn_delete" class="flat_button right" onclick="sendCommand('mediaDelete','ringtone_file');" hidden><div class = "flat_icon icon_trash"></div></button>
+          <button class="flat_button right" onclick="document.getElementById('ringtone_file').click();"><div class = "flat_icon icon_upload"></div></button>
+        </div>
+      </div>
+      <div id="ringtone_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
       <div class = "panel line"></div>
       <div class = "panel top horizontal-grid add-margin-top">
         <div class = "icon icon_ota"></div>

@@ -42,7 +42,6 @@ class TLGManager {
         bool _await = false;
         bool ping = false;
         uint8_t after_ping = 0;
-        uint8_t responce_error_counter = 0;
         uint64_t timer;
         uint64_t update_id = 0;
         bool getMe();

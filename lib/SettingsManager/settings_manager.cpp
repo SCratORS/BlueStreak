@@ -36,6 +36,7 @@ void SettingsManager::CheckDefault() {
     if (settings.delay_system == 0) settings.delay_system = 500;
     if (settings.mqtt_port == 0) settings.mqtt_port = 1883;
     if (settings.counter_duration == 0) settings.counter_duration = 190;
+    if (settings.impulse_filter == 0) settings.impulse_filter = 100;
 }
 
 void SettingsManager::LoadSettings(fs::FS aFS) {
@@ -55,6 +56,7 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.sound = json["sound"].as<bool>();
         settings.mute = json["mute"].as<bool>();
         settings.greeting = json["greeting"].as<bool>();
+        settings.ringtone = json["ringtone"].as<bool>();
         settings.phone_disable = json["phone_disable"].as<bool>();
         settings.modes = json["modes"].as<uint8_t>();
         settings.server_type = json["server_type"].as<uint8_t>();
@@ -88,6 +90,7 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.dev_name = json["dev_name"].as<std::string>();
         settings.reboot_timeout = json["reboot_timeout"].as<uint8_t>();
         settings.counter_duration = json["counter_duration"].as<uint16_t>();
+        settings.impulse_filter = json["impulse_filter"].as<uint16_t>();
         CheckDefault();
         last_error = 0;
     }
@@ -108,6 +111,7 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["led"] = settings.led;
         json["sound"] = settings.sound;
         json["greeting"] = settings.greeting;
+        json["ringtone"] = settings.ringtone;
         json["mute"] = settings.mute;
         json["phone_disable"] = settings.phone_disable;
         json["modes"] = settings.modes;
@@ -142,6 +146,7 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
         json["dev_name"] = settings.dev_name;
         json["reboot_timeout"] = settings.reboot_timeout;
         json["counter_duration"] = settings.counter_duration;
+        json["impulse_filter"] = settings.impulse_filter;
         serializeJson(json, file);
         last_error = 0;
   }
@@ -158,6 +163,7 @@ void SettingsManager::ResetSettings() {
     settings.sound = true;
     settings.mute = false;
     settings.greeting = false;
+    settings.ringtone = false;
     settings.phone_disable = false;
     settings.modes = 0;
     settings.server_type = 0;
@@ -191,6 +197,7 @@ void SettingsManager::ResetSettings() {
     settings.dev_name = "smartintercom";
     settings.reboot_timeout = 0;
     settings.counter_duration = 190;
+    settings.impulse_filter = 100;
     last_error = 0;
 }
 
@@ -202,6 +209,7 @@ std::string SettingsManager::getSettings(){
     json["led"] = settings.led;
     json["sound"] = settings.sound;
     json["greeting"] = settings.greeting;
+    json["ringtone"] = settings.ringtone;
     json["mute"] = settings.mute;
     json["phone_disable"] = settings.phone_disable;
     json["modes"] = settings.modes;
@@ -236,6 +244,7 @@ std::string SettingsManager::getSettings(){
     json["dev_name"] = settings.dev_name;
     json["reboot_timeout"] = settings.reboot_timeout;
     json["counter_duration"] = settings.counter_duration;
+    json["impulse_filter"] = settings.impulse_filter;
     serializeJson(json, message);
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
@@ -243,9 +252,7 @@ std::string SettingsManager::getSettings(){
 
 std::string SettingsManager::setMode(uint8_t value) {
     settings.modes = value;
-    json.clear();
-    json["modes"] = settings.modes;
-    serializeJson(json, message);
+    message = "{\"modes\":" + std::to_string(settings.modes) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
@@ -254,11 +261,9 @@ std::string SettingsManager::setAccept(bool value) {
     settings.accept_call = value;
     if (value) settings.reject_call = false;
     else settings.delivery = false;
-    json.clear();
-    json["accept_call"] = settings.accept_call;
-    json["delivery"] = settings.delivery;
-    json["reject_call"] = settings.reject_call;
-    serializeJson(json, message);
+    message = "{\"accept_call\":" + std::string(settings.accept_call?"true":"false") + "," +
+                "\"delivery\":" + std::string(settings.delivery?"true":"false") + "," +
+                "\"reject_call\":" + std::string(settings.reject_call?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
@@ -269,11 +274,9 @@ std::string SettingsManager::setDelivery(bool value) {
         settings.accept_call = true;
         settings.reject_call = false;
     }
-    json.clear();
-    json["accept_call"] = settings.accept_call;
-    json["delivery"] = settings.delivery;
-    json["reject_call"] = settings.reject_call;
-    serializeJson(json, message);
+    message = "{\"accept_call\":" + std::string(settings.accept_call?"true":"false") + "," +
+                "\"delivery\":" + std::string(settings.delivery?"true":"false") + "," +
+                "\"reject_call\":" + std::string(settings.reject_call?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
@@ -284,332 +287,275 @@ std::string SettingsManager::setReject(bool value) {
         settings.accept_call = false;
         settings.delivery = false;
     }
-    json.clear();
-    json["accept_call"] = settings.accept_call;
-    json["delivery"] = settings.delivery;
-    json["reject_call"] = settings.reject_call;
-    serializeJson(json, message);
+    message = "{\"accept_call\":" + std::string(settings.accept_call?"true":"false") + "," +
+                "\"delivery\":" + std::string(settings.delivery?"true":"false") + "," +
+                "\"reject_call\":" + std::string(settings.reject_call?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setDelaySystem(uint16_t value) {
     settings.delay_system = value;
-    json.clear();
-    json["delay_system"] = settings.delay_system;
-    serializeJson(json, message);
+    message = "{\"delay_system\":" + std::to_string(settings.delay_system) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setDelayBeforeAnswer(uint16_t value) {
     settings.delay_before = value;
-    json.clear();
-    json["delay_before"] = settings.delay_before;
-    serializeJson(json, message);
+    message = "{\"delay_before\":" + std::to_string(settings.delay_before) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setDelayOpen(uint16_t value) {
     settings.delay_open = value;
-    json.clear();
-    json["delay_open"] = settings.delay_open;
-    serializeJson(json, message);
+    message = "{\"delay_open\":" + std::to_string(settings.delay_open) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setDelayAfterClose(uint16_t value) {
     settings.delay_after = value;
-    json.clear();
-    json["delay_after"] = settings.delay_after;
-    serializeJson(json, message);
+    message = "{\"delay_after\":" + std::to_string(settings.delay_after) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setCodeLifeTime(uint16_t value) {
     settings.access_code_lifetime = value;
-    json.clear();
-    json["access_code_lifetime"] = settings.access_code_lifetime;
-    serializeJson(json, message);
+    message = "{\"access_code_lifetime\":" + std::to_string(settings.access_code_lifetime) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setDelayFilter(uint16_t value) {
     settings.delay_filter = value;
-    json.clear();
-    json["delay_filter"] = settings.delay_filter;
-    serializeJson(json, message);
+    message = "{\"delay_filter\":" + std::to_string(settings.delay_filter) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setCallEndDelay(uint16_t value) {
     settings.call_end_delay = value;
-    json.clear();
-    json["call_end_delay"] = settings.call_end_delay;
-    serializeJson(json, message);
+    message = "{\"call_end_delay\":" + std::to_string(settings.call_end_delay) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setAddressCounter(uint8_t value) {
     settings.address_counter = value;
-    json.clear();
-    json["address_counter"] = settings.address_counter;
-    serializeJson(json, message);
+    message = "{\"address_counter\":" + std::to_string(settings.address_counter) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setGreetingDelay(uint16_t value) {
     settings.greeting_delay = value;
-    json.clear();
-    json["greeting_delay"] = settings.greeting_delay;
-    serializeJson(json, message);
+    message = "{\"greeting_delay\":" + std::to_string(settings.greeting_delay) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setLed(bool value) {
     settings.led = value;
-    json.clear();
-    json["led"] = settings.led;
-    serializeJson(json, message);
+    message = "{\"led\":" + std::string(settings.led?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setChildLock(bool value) {
     settings.child_lock = value;
-    json.clear();
-    json["child_lock"] = settings.child_lock;
-    serializeJson(json, message);
+    message = "{\"child_lock\":" + std::string(settings.child_lock?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setRetain(bool value) {
     settings.mqtt_retain = value;
-    json.clear();
-    json["mqtt_retain"] = settings.mqtt_retain;
-    serializeJson(json, message);
+    message = "{\"mqtt_retain\":" + std::string(settings.mqtt_retain?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setSound(bool value) {
     settings.sound = value;
-    json.clear();
-    json["sound"] = settings.sound;
-    serializeJson(json, message);
+    message = "{\"sound\":" + std::string(settings.sound?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setMute(bool value) {
     settings.mute = value;
-    json.clear();
-    json["mute"] = settings.mute;
-    serializeJson(json, message);
+    message = "{\"mute\":" + std::string(settings.mute?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setPhoneDisable(bool value) {
     settings.phone_disable = value;
-    json.clear();
-    json["phone_disable"] = settings.phone_disable;
-    serializeJson(json, message);
+    message = "{\"phone_disable\":" + std::string(settings.phone_disable?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setSSID(std::string value) {
     settings.wifi_ssid = value;
-    json.clear();
-    json["ssid"] = settings.wifi_ssid;
-    serializeJson(json, message);
+    message = "{\"ssid\":\"" + settings.wifi_ssid + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setWIFIPassword(std::string value) {
     settings.wifi_passwd = value;
-    json.clear();
-    json["wifi_passwd"] = settings.wifi_passwd;
-    serializeJson(json, message);
+    message = "{\"wifi_passwd\":\"" + settings.wifi_passwd + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setServerType(uint8_t value) {
     settings.server_type = value;
-    json.clear();
-    json["server_type"] = settings.server_type;
-    serializeJson(json, message);
+    message = "{\"server_type\":" + std::to_string(settings.server_type) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setMQTTServer(std::string value) {
     settings.mqtt_server = value;
-    json.clear();
-    json["mqtt_server"] = settings.mqtt_server;
-    serializeJson(json, message);
+    message = "{\"mqtt_server\":\"" + settings.mqtt_server + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setMQTTPort(uint16_t value) {
     settings.mqtt_port = value;
-    json.clear();
-    json["mqtt_port"] = settings.mqtt_port;
-    serializeJson(json, message);
+    message = "{\"mqtt_port\":" + std::to_string(settings.mqtt_port) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setMQTTLogin(std::string value) {
     settings.mqtt_login = value;
-    json.clear();
-    json["mqtt_login"] = settings.mqtt_login;
-    serializeJson(json, message);
+    message = "{\"mqtt_login\":\"" + settings.mqtt_login + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setMQTTPassword(std::string value) {
     settings.mqtt_passwd = value;
-    json.clear();
-    json["mqtt_passwd"] = settings.mqtt_passwd;
-    serializeJson(json, message);
+    message = "{\"mqtt_passwd\":\"" + settings.mqtt_passwd + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setDevName(std::string value) {
     settings.dev_name = value;
-    json.clear();
-    json["dev_name"] = settings.dev_name;
-    serializeJson(json, message);
+    message = "{\"dev_name\":\"" + settings.dev_name + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setTLGToken(std::string value) {
     settings.tlg_token = value;
-    json.clear();
-    json["tlg_token"] = settings.tlg_token;
-    serializeJson(json, message);
+    message = "{\"tlg_token\":\"" + settings.tlg_token + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setTLGUser(std::string value) {
     settings.tlg_user = value;
-    json.clear();
-    json["tlg_user"] = settings.tlg_user;
-    serializeJson(json, message);
+    message = "{\"tlg_user\":\"" + settings.tlg_user + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setUserLogin(std::string value) {
     settings.user_login = value;
-    json.clear();
-    json["user_login"] = settings.user_login;
-    serializeJson(json, message);
+    message = "{\"user_login\":\"" + settings.user_login + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setUserPassword(std::string value) {
     settings.user_passwd = value;
-    json.clear();
-    json["user_passwd"] = settings.user_passwd;
-    serializeJson(json, message);
+    message = "{\"user_passwd\":\"" + settings.user_passwd + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setTLGCode(std::string value) {
     settings.access_code = value;
-    json.clear();
-    json["access_code"] = settings.access_code==""?"------":settings.access_code;
-    serializeJson(json, message);
+    message = "{\"access_code\":\"" + std::string(settings.access_code==""?"------":settings.access_code) + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setAuth(bool value) {
     settings.web_auth = value;
-    json.clear();
-    json["web_auth"] = settings.web_auth;
-    serializeJson(json, message);
+    message = "{\"web_auth\":" + std::string(settings.web_auth?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setGreeting(bool value) {
     settings.greeting = value;
-    json.clear();
-    json["greeting"] = settings.greeting;
-    serializeJson(json, message);
+    message = "{\"greeting\":" + std::string(settings.greeting?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
+
+std::string SettingsManager::setRingtone(bool value) {
+    settings.ringtone = value;
+    message = "{\"ringtone\":" + std::string(settings.ringtone?"true":"false") + "}";
+    LOG("[%s] %s\n", TAG, message.c_str());
+    return message;
+}
+
 std::string SettingsManager::setForceOpen(bool value) {
     settings.force_open = value;
-    json.clear();
-    json["force_open"] = settings.force_open;
-    serializeJson(json, message);
+    message = "{\"force_open\":" + std::string(settings.force_open?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 std::string SettingsManager::setSysLog(bool value) {
     settings.syslog = value;
-    json.clear();
-    json["syslog"] = settings.syslog;
-    serializeJson(json, message);
+    message = "{\"syslog\":" + std::string(settings.syslog?"true":"false") + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 std::string SettingsManager::setSysLogPort(uint16_t value) {
     settings.syslog_port = value;
-    json.clear();
-    json["syslog_port"] = settings.syslog_port;
-    serializeJson(json, message);
+    message = "{\"syslog_port\":" + std::to_string(settings.syslog_port) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 std::string SettingsManager::setSysLogServer(std::string value) {
     settings.syslog_server = value;
-    json.clear();
-    json["syslog_server"] = settings.syslog_server;
-    serializeJson(json, message);
+    message = "{\"syslog_server\":\"" + settings.syslog_server + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setRebootTimeout(uint8_t value) {
     settings.reboot_timeout = value;
-    json.clear();
-    json["reboot_timeout"] = settings.reboot_timeout;
-    serializeJson(json, message);
+    message = "{\"reboot_timeout\":" + std::to_string(settings.reboot_timeout) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
 
 std::string SettingsManager::setCounterDuration(uint16_t value) {
     settings.counter_duration = value;
-    json.clear();
-    json["counter_duration"] = settings.counter_duration;
-    serializeJson(json, message);
+    message = "{\"counter_duration\":" + std::to_string(settings.counter_duration) + "}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }
+
+std::string SettingsManager::setImpulseFilter(uint16_t value) {
+    settings.impulse_filter = value;
+    message = "{\"impulse_filter\":" + std::to_string(settings.impulse_filter) + "}";
+    LOG("[%s] %s\n", TAG, message.c_str());
+    return message;
+}
+
+
 
