@@ -112,7 +112,6 @@ progress {
   background-repeat: no-repeat;
   background-position: center;
   width: var(--7wp);
-  aspect-ratio: 1 / 1;
   display: block;
   margin-right: var(--3wp);
 }
@@ -126,6 +125,9 @@ progress {
 .icon_door-open {
   background-image: url(images/door-open.svg);
 }
+.icon_open {
+  background-image: url(images/open.svg);
+}
 .icon_package {
   background-image: url(images/package.svg);
 }
@@ -138,9 +140,6 @@ progress {
 .icon_bell {
   background-image: url(images/bell.svg);
 }
-.icon_bell-off {
-  background-image: url(images/bell-off.svg);
-}
 .icon_clock {
   background-image: url(images/clock.svg);
 }
@@ -150,8 +149,14 @@ progress {
 .icon_led-on {
   background-image: url(images/led-on.svg);
 }
-.icon_volume-high {
-  background-image: url(images/volume-high.svg);
+.icon_microphone {
+  background-image: url(images/microphone.svg);
+}
+.icon_volume_off {
+  background-image: url(images/volume-off.svg);
+}
+.icon_bell_ring {
+  background-image: url(images/bell-ring.svg);
 }
 .icon_binary-off{
   background-image: url(images/binary-off.svg);
@@ -285,6 +290,13 @@ button  {
 	box-shadow: inset 0 100vw var(--color-accent);
 	border: 1px solid transparent;
   font-size: 100%;
+}
+
+.button-icon {
+  display: flex;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .flat_button  {

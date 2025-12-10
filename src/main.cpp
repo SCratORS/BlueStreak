@@ -1,4 +1,5 @@
 #include <ESPAsyncWebserver.h>
+#include <esp_task_wdt.h>
 #include <Update.h>
 #include <Syslog.h>
 #include "FTPServer.h"
@@ -14,6 +15,7 @@
 #include "switch.h"
 #include "select.h"
 #include "sensor.h"
+#include "button.h"
 #include "binary_sensor.h"
 
 #include "AudioGeneratorMP3.h"
@@ -23,14 +25,18 @@
 #include "AudioFileSourceLittleFS.h"
 #define aFS LittleFS
 
+#define WDT_TIMEOUT 4
+esp_err_t ESP32_ERROR;
+
 static const char* TAG = "MAIN";
 std::string mode_name[3] = {"Не активен","Сброс вызова","Открывать всегда"}; 
-enum {WAIT, CALLING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, SWCLOSE, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
+enum {WAIT, CALLING, RING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, SWCLOSE, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
 static uint8_t currentAction = WAIT;
 static uint32_t detectMillis = 0;
 static uint32_t audioLength = 0;
 static uint64_t tlg_restart_timer;
 static uint64_t reboot_timeout;
+static bool webSocketLog = false;
 
 static AudioOutputI2S *audioOut = new AudioOutputI2S(0, AudioOutputI2S::INTERNAL_DAC);
 static AudioGenerator *audioPlayer;
@@ -69,6 +75,7 @@ Syslog * syslog;
 Switch * accept_once;
 Switch * reject_once;
 Switch * delivery_once;
+Button * open_door;
 Switch * sound;
 Switch * led;
 Switch * mute;
@@ -90,6 +97,16 @@ static int16_t currentAddressCounter = 0;
 static bool syncCounter = false;
 static bool triggerCounter = false;
 static bool finishCounter = false;
+
+std::string ReplaceString(std::string subject, const std::string& search,
+                          const std::string& replace) {
+    size_t pos = 0;
+    while ((pos = subject.find(search, pos)) != std::string::npos) {
+         subject.replace(pos, search.length(), replace);
+         pos += replace.length();
+    }
+    return subject;
+}
 
 void LOG(const char * format, ...) {
     char loc_buf[64];
@@ -114,6 +131,12 @@ void LOG(const char * format, ...) {
     }
     va_end(arg);
     if (syslog) syslog->log(temp);
+    
+    if (webSocketLog) {
+      std::string logtext = "{\"text\":\"" + ReplaceString(ReplaceString(std::string(temp), "\n", ""), "\"", "\\\"") + "\\n\"}";
+      ws.textAll(logtext.c_str());
+    }
+
     Serial.printf("[%d] ", millis());
     Serial.print(temp);
 }
@@ -136,9 +159,7 @@ std::string get_fs_used() {
 
 void setLineStatus(std::string value){
   device_status.line_status = value;
-  json.clear();
-  json["line_status"] = device_status.line_status;
-  serializeJson(json, message);
+  message = "{\"line_status\":\"" + device_status.line_status + "\"}";
   LOG("[%s] %s\n", TAG, message.c_str());
   if (line_status) line_status->publishValue();
   ws.textAll(message.c_str());
@@ -146,9 +167,7 @@ void setLineStatus(std::string value){
 
 void setLineDetect(bool value){
   device_status.line_detect = value;
-  json.clear();
-  json["line_detect"] = device_status.line_detect;
-  serializeJson(json, message);
+  message = "{\"line_detect\":" + std::string(device_status.line_detect?"true":"false") + "}";
   LOG("[%s] %s\n", TAG, message.c_str());
   if (line_detect) line_detect->publishValue();
   if (tlg_manager) {
@@ -166,22 +185,19 @@ void setLineDetect(bool value){
   ws.textAll(message.c_str());
 }
 
-void sendAlert(std::string value){
-  json.clear();
-  json["alert"] = value;
-  serializeJson(json, message);
+void sendAlert(std::string value) {
+  message = "{\"alert\":\"" + value + "\"}";
   LOG("[%s] %s\n", TAG, message.c_str());
   ws.textAll(message.c_str());
 }
 
 void sendStatus(){
   json.clear();
-  json["accept_call"] = settings_manager->settings.accept_call;
-  json["delivery"] =    settings_manager->settings.delivery;
-  json["reject_call"] = settings_manager->settings.reject_call;
-  json["line_detect"] = device_status.line_detect;
-  json["line_status"] = device_status.line_status;
-  serializeJson(json, message);
+  message = "{\"accept_call\":" + std::string(settings_manager->settings.accept_call?"true":"false") + "," +
+            "\"delivery\":" + std::string(settings_manager->settings.delivery?"true":"false") + "," +
+            "\"reject_call\":" + std::string(settings_manager->settings.reject_call?"true":"false") + "," +
+            "\"line_detect\":" + std::string(device_status.line_detect?"true":"false") + "," +
+            "\"line_status\":\"" + device_status.line_status + "\"}";
   LOG("[%s] %s\n", TAG, message.c_str());
   ws.textAll(message.c_str());
   if (line_detect) line_detect->publishValue();
@@ -190,27 +206,34 @@ void sendStatus(){
 }
 
 std::string getMediaExists() {
-  json.clear();
-  json["fs_used"] = get_fs_used();
-  json["access_allowed_play"] =   aFS.exists(String(ACCEPT_FILENAME) + ".mp3") ? (String(ACCEPT_FILENAME) + ".mp3") : ( aFS.exists(String(ACCEPT_FILENAME) + ".wav") ? (String(ACCEPT_FILENAME) + ".wav") : nullptr);
-  json["greeting_allowed_play"] = aFS.exists(String(GREETING_FILENAME) + ".mp3") ? (String(GREETING_FILENAME) + ".mp3") : ( aFS.exists(String(GREETING_FILENAME) + ".wav") ? (String(GREETING_FILENAME) + ".wav") : nullptr);
-  json["delivery_allowed_play"] = aFS.exists(String(DELIVERY_FILENAME) + ".mp3") ? (String(DELIVERY_FILENAME) + ".mp3") : ( aFS.exists(String(DELIVERY_FILENAME) + ".wav") ? (String(DELIVERY_FILENAME) + ".wav") : nullptr);
-  json["access_denied_play"] =    aFS.exists(String(REJECT_FILENAME) + ".mp3") ? (String(REJECT_FILENAME) + ".mp3") : ( aFS.exists(String(REJECT_FILENAME) + ".wav") ? (String(REJECT_FILENAME) + ".wav") : nullptr);
-  serializeJson(json, message);
+  std::string aap = std::string(ACCEPT_FILENAME) + ".mp3";
+  std::string aapw = std::string(ACCEPT_FILENAME) + ".wav";
+  std::string gap = std::string(GREETING_FILENAME) + ".mp3";
+  std::string gapw = std::string(GREETING_FILENAME) + ".wav";
+  std::string dap = std::string(DELIVERY_FILENAME) + ".mp3";
+  std::string dapw = std::string(DELIVERY_FILENAME) + ".wav";
+  std::string adp = std::string(REJECT_FILENAME) + ".mp3";
+  std::string adpw = std::string(REJECT_FILENAME) + ".wav";
+  std::string rgt = std::string(RINGTONE_FILENAME) + ".mp3";
+  std::string rgtw = std::string(RINGTONE_FILENAME) + ".wav";
+  message = "{\"fs_used\":\"" + get_fs_used() + "\"," +
+            "\"access_allowed_play\":" + std::string(aFS.exists(aap.c_str()) ? std::string("\"" + aap + "\"") : (aFS.exists(aapw.c_str()) ? std::string("\"" + aapw + "\"")  : "null")) + "," +
+            "\"greeting_allowed_play\":" + std::string(aFS.exists(gap.c_str()) ? std::string("\"" + gap + "\"") : (aFS.exists(gapw.c_str()) ? std::string("\"" + gapw + "\"")  : "null")) + "," +
+            "\"ringtone_play\":" + std::string(aFS.exists(rgt.c_str()) ? std::string("\"" + rgt + "\"") : (aFS.exists(rgtw.c_str()) ? std::string("\"" + rgtw + "\"")  : "null")) + "," +
+            "\"delivery_allowed_play\":" + std::string(aFS.exists(dap.c_str()) ? std::string("\"" + dap + "\"") : (aFS.exists(dapw.c_str()) ? std::string("\"" + dapw + "\"")  : "null")) + "," +
+            "\"access_denied_play\":" + std::string(aFS.exists(adp.c_str()) ? std::string("\"" + adp + "\"") : (aFS.exists(adpw.c_str()) ? std::string("\"" + adpw + "\"")  : "null")) + "}";
   LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
 
 std::string getStatus(){ 
   device_info->control = "http://"+wifi_manager->ip;
-  json.clear();
-  json["ftp"] = (ftp_server)?true:false;
-  json["ip"] = wifi_manager->ip;
-  json["line_detect"] = device_status.line_detect;
-  json["line_status"] = device_status.line_status;
-  json["firmware"] = CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION;
-  json["copyright"] = COPYRIGHT;
-  serializeJson(json, message);
+  message = "{\"ftp\":" + std::string(ftp_server?"true":"false") + "," +
+            "\"ip\":\"" + wifi_manager->ip + "\"," +
+            "\"line_detect\":" + std::string(device_status.line_detect?"true":"false") + "," +
+            "\"line_status\":\"" + device_status.line_status + "\"," +
+            "\"firmware\":\"" + std::string(CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION) + "\"," +
+            "\"copyright\":\"" + std::string(COPYRIGHT) + "\"}";
   LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
@@ -277,17 +300,26 @@ void IRAM_ATTR TimerHandler0() {
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
+void deleteAudio(){
+  audioPlayer->stop();
+  audioLength = millis() - audioLength;
+  delete audioPlayer; audioPlayer = nullptr;
+  delete audioFile; audioFile = nullptr; 
+}
+
+
 uint64_t reset_time = 0;
+bool ringplay = false;
 void calling_detect() {
   if (currentAction == WAIT) {
     if (settings_manager->settings.mute && 
         (settings_manager->settings.accept_call ||
-        settings_manager->settings.delivery ||
         settings_manager->settings.reject_call ||
         settings_manager->settings.modes )) {
       gpio_set_level(switch_phone, 1);  
       gpio_set_level(relay_line, 1);
-    }
+    } 
+    ringplay = false;
     detectMillis = millis();
     currentAction = CALLING;
   }
@@ -319,7 +351,7 @@ void IRAM_ATTR call_detector_isr() {
   }
 */
   reset_time = millis();
-  if (currentAction == WAIT) {
+    if (currentAction == WAIT) {
     if (settings_manager->settings.address_counter) {
       if (!syncCounter) {
         syncCounter = true;
@@ -329,12 +361,15 @@ void IRAM_ATTR call_detector_isr() {
       }
     } else calling_detect();
   }
-  if (currentAction == CALLING) {
-    if (settings_manager->settings.address_counter) {
-      if (!syncCounter && finishCounter && !triggerCounter) currentAction = RESET;
-    }
+  //Если триггер сработал (т.е. мы с цифрой имеем дело, а значит синхра уже была и счетчик закончил счет)
+  //И мы находимся в режиме детекции вызова, но отработка не запущена, и поймали сигнал отбоя, то
+  //сравниваем время импульса с длиной синхро импульса, и сбрасываем детектор если это оно.
+  if (triggerCounter && currentAction == CALLING) {
+      if (reset_time - last_time_detect > settings_manager->settings.counter_duration) {
+        triggerCounter = false;
+        currentAction = RESET;
+      }
   }
-
 }
 
 void phone_disable_action () {
@@ -371,13 +406,6 @@ bool initAudio(const char * filename) {
   return false;
 }
 
-void deleteAudio(){
-  audioPlayer->stop();
-  audioLength = millis() - audioLength;
-  delete audioPlayer; audioPlayer = nullptr;
-  delete audioFile; audioFile = nullptr; 
-}
-
 uint64_t timerAction = 0;
 void doAction(uint32_t timer) {
   switch (currentAction) {
@@ -389,14 +417,38 @@ void doAction(uint32_t timer) {
                       setLineStatus(l_status_call);
                     }
                     if (settings_manager->settings.accept_call ||
-                        settings_manager->settings.delivery ||
                         settings_manager->settings.reject_call ||
                         settings_manager->settings.modes ) {
                           currentAction = CALL;
                           detectMillis = millis(); 
                           timerAction += settings_manager->settings.delay_system;      
-                        }    
+                        } else {
+                          if (!ringplay && settings_manager->settings.ringtone) {
+                            ringplay = true;
+                            if (audioPlayer) deleteAudio();
+                            if (initAudio(RINGTONE_FILENAME)) {
+                              gpio_set_level(switch_phone, 0);  
+                              gpio_set_level(relay_line, 1);
+                              currentAction = RING;
+                              LOG("[%s] %s\n", TAG, "Play");
+                            }
+                          }
+                        }   
                   } break;
+    case RING:    if (!audioPlayer->loop()) {
+                    deleteAudio();
+                    gpio_set_level(relay_line, 0);
+                    ringplay = true;
+                    currentAction = CALLING;
+                  } 
+                  if (settings_manager->settings.accept_call ||
+                    settings_manager->settings.reject_call ||
+                    settings_manager->settings.modes ) {
+                      currentAction = CALL;
+                      detectMillis = millis(); 
+                      timerAction += settings_manager->settings.delay_system;      
+                  }
+                  break;
     case CALL:  if (timer > timerAction) {
                   gpio_set_level(switch_phone, 0);  
                   gpio_set_level(relay_line, 1);
@@ -406,7 +458,7 @@ void doAction(uint32_t timer) {
                 } break;
     case SWUP:  if (timer > timerAction) {
                   if (settings_manager->settings.sound || settings_manager->settings.delivery) {
-                      
+                    if (audioPlayer) deleteAudio();
                     if (initAudio(settings_manager->settings.delivery ? DELIVERY_FILENAME : 
                                   settings_manager->settings.accept_call ? ACCEPT_FILENAME :
                                   settings_manager->settings.reject_call ? REJECT_FILENAME :
@@ -416,15 +468,13 @@ void doAction(uint32_t timer) {
                     }
                   }
                   audioLength = 0;
-                  currentAction = ( settings_manager->settings.delivery || 
-                                    settings_manager->settings.accept_call || 
+                  currentAction = ( settings_manager->settings.accept_call || 
                                     (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? PREOPEN : DROP;
                   if (currentAction == PREOPEN) timerAction += settings_manager->settings.delay_system;
                 } break;
     case VOICE: if (!audioPlayer->loop()) {
                   deleteAudio();
-                  currentAction = ( settings_manager->settings.delivery || 
-                                    settings_manager->settings.accept_call || 
+                  currentAction = ( settings_manager->settings.accept_call || 
                                     (settings_manager->settings.modes == 2 && !settings_manager->settings.reject_call)) ? SWOPEN : DROP;
                 } break;
     case PREOPEN: if (timer > timerAction) currentAction = SWOPEN;
@@ -454,12 +504,12 @@ void doAction(uint32_t timer) {
                     currentAction = DROP;
                   } break;
     case GREETING_VOICE: if (timer > timerAction) {
-                  if (!audioPlayer->loop()) {
-                    deleteAudio();
-                    timerAction += audioLength;
-                    currentAction = DROP;
-                  }
-                } break;
+                    if (!audioPlayer->loop()) {
+                      deleteAudio();
+                      timerAction += audioLength;
+                      currentAction = DROP;
+                    }
+                  } break;
     case DROP:  if (timer > timerAction) {
                   if (settings_manager->settings.force_open) gpio_set_level(relay_line, 1);
                   else gpio_set_level(switch_open, 0);
@@ -468,9 +518,8 @@ void doAction(uint32_t timer) {
                   currentAction = ENDING;
                   timerAction += settings_manager->settings.delay_after;
                 } break;
-    case ENDING:if (timer > timerAction) {
-                  currentAction = RESET;
-                } break;
+    case ENDING:if (timer > timerAction) currentAction = RESET;
+                break;
     case RESET: gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
                 gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
                 gpio_set_level(switch_open, 0);
@@ -482,6 +531,7 @@ void doAction(uint32_t timer) {
                 sendStatus();
                 currentAction = WAIT;
                 timerAction = 0;
+                if (audioPlayer) deleteAudio();
                 break;
   }
 }
@@ -498,40 +548,23 @@ std::string enable_ftp_server(bool value) {
       delete ftp_server; ftp_server = nullptr;
     }
   }
-  json.clear();
-  json["ftp"] = value;
-  serializeJson(json, message);
+  message = "{\"ftp\":" + std::string(value?"true":"false") + "}";
   LOG("[%s] %s\n", TAG, message.c_str());
   return message;
+}
+
+void openAction(){
+  if (currentAction == WAIT || currentAction == RING || currentAction == CALLING) {
+    settings_manager->settings.accept_call = true;
+    currentAction = CALL;
+    detectMillis = millis(); 
+    timerAction += settings_manager->settings.delay_system;      
+  }  
 }
 
 void setMode(uint8_t value) {
   ws.textAll(settings_manager->setMode(value).c_str());
   if (modes) modes->publishValue();
-}
-
-void setRoom(uint8_t value) {
-  ws.textAll(settings_manager->setAddressCounter(value).c_str());
-}
-
-void setDevName(std::string value) {
-  ws.textAll(settings_manager->setDevName(value).c_str());
-}
-
-void setSysLogPort(uint16_t value) {
-  ws.textAll(settings_manager->setSysLogPort(value).c_str());
-}
-
-void setSysLogServer(std::string value) {
-  ws.textAll(settings_manager->setSysLogServer(value).c_str());
-}
-
-void setRebootTimeout(uint8_t value) {
-  ws.textAll(settings_manager->setRebootTimeout(value).c_str());
-}
-
-void setCounterDuration(uint16_t value) {
-  ws.textAll(settings_manager->setCounterDuration(value).c_str());
 }
 
 void setAccept(bool value) {
@@ -563,9 +596,7 @@ void setMute(bool value) {
   ws.textAll(settings_manager->setMute(value).c_str());
   if (mute) mute->publishValue();
 }
-void setSysDelay(uint16_t value) {
-  ws.textAll(settings_manager->setDelaySystem(value).c_str());
-}
+
 void setPhoneDisable(bool value) {
   ws.textAll(settings_manager->setPhoneDisable(value).c_str());
   if (phone_disable) phone_disable->publishValue();
@@ -653,7 +684,6 @@ void tlg_message(std::string from_id, std::string chat_id, std::string message, 
 void tlg_callback_query(std::string from_id, std::string chat_id, std::string callback_query) {
   if (settings_manager->settings.tlg_user.find(from_id) == std::string::npos) return; // Только приватный доступ
   if (callback_query == "") return; // Пустой запрос
-
   if (callback_query == "modes") tlg_manager->sendModeKeyboard(true, chat_id);
   else if (callback_query == "generate_code") {
     tlg_code_generate();
@@ -679,7 +709,6 @@ void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
   std::string message  = (char*)payload;
   LOG("[%s] MQTT TOPIC: %s MESSAGE: %s\n", TAG, strTopic.c_str(), message.c_str());
   mqtt_manager->getEntity(strTopic.c_str())->callback(message);
-  
   if (strTopic == modes->callback_topic) setMode(settings_manager->settings.modes);
   else if (strTopic == led->callback_topic) setLed(settings_manager->settings.led); 
   else if (strTopic == sound->callback_topic) setSound(settings_manager->settings.sound); 
@@ -688,12 +717,15 @@ void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
   else if (strTopic == accept_once->callback_topic) setAccept(settings_manager->settings.accept_call);
   else if (strTopic == delivery_once->callback_topic) setDelivery(settings_manager->settings.delivery);
   else if (strTopic == reject_once->callback_topic) setReject(settings_manager->settings.reject_call);
+  else if (strTopic == open_door->callback_topic) openAction();
 }
 
 void entity_configuration(PubSubClient * mqtt_client) {
   accept_once = new Switch("accept_call", mqtt_client, &settings_manager->settings.accept_call, &settings_manager->settings.mqtt_retain);
   reject_once = new Switch("reject_call", mqtt_client, &settings_manager->settings.reject_call, &settings_manager->settings.mqtt_retain);
   delivery_once = new Switch("delivery_call", mqtt_client, &settings_manager->settings.delivery, &settings_manager->settings.mqtt_retain);
+  open_door = new Button("oper_door", mqtt_client, nullptr, &settings_manager->settings.mqtt_retain);
+
   sound = new Switch("sound", mqtt_client, &settings_manager->settings.sound, &settings_manager->settings.mqtt_retain);
   led = new Switch("led", mqtt_client, &settings_manager->settings.led, &settings_manager->settings.mqtt_retain);
   mute = new Switch("mute", mqtt_client, &settings_manager->settings.mute, &settings_manager->settings.mqtt_retain);
@@ -711,10 +743,11 @@ void entity_configuration(PubSubClient * mqtt_client) {
   accept_once->ic = "mdi:door-open";accept_once->friendly_name = accept_call_name; mqtt_manager->addEntity(accept_once);
   reject_once->ic = "mdi:phone-hangup";reject_once->friendly_name = reject_call_name; mqtt_manager->addEntity(reject_once);
   delivery_once->ic = "mdi:package";delivery_once->friendly_name = delivery_call_name; mqtt_manager->addEntity(delivery_once);
+  open_door->ic = "mdi:lock-open";open_door->friendly_name = open_door_name; mqtt_manager->addEntity(open_door);
   line_detect->friendly_name = "Детектор вызова"; mqtt_manager->addEntity(line_detect);
-  sound->ent_cat = "config";sound->ic = "mdi:volume-high";sound->friendly_name = sound_name; mqtt_manager->addEntity(sound);
+  sound->ent_cat = "config";sound->ic = "mdi:microphone-message";sound->friendly_name = sound_name; mqtt_manager->addEntity(sound);
   led->ent_cat = "config";led->ic = "mdi:led-on";led->friendly_name = led_name; mqtt_manager->addEntity(led);
-  mute->ent_cat = "config";mute->ic = "mdi:bell-off";mute->friendly_name = mute_name; mqtt_manager->addEntity(mute);
+  mute->ent_cat = "config";mute->ic = "mdi:volume-off";mute->friendly_name = mute_name; mqtt_manager->addEntity(mute);
   phone_disable->ent_cat = "config";phone_disable->ic = "mdi:phone-off";phone_disable->friendly_name = phone_disable_name; mqtt_manager->addEntity(phone_disable);
 }
 
@@ -722,6 +755,7 @@ void entity_delete() {
   delete(accept_once);accept_once = nullptr;
   delete(reject_once);reject_once = nullptr;
   delete(delivery_once);delivery_once = nullptr;
+  delete(open_door);open_door = nullptr;
   delete(sound);sound = nullptr;
   delete(led);led = nullptr;
   delete(mute);mute = nullptr;
@@ -784,9 +818,7 @@ void enable_mqtt(bool value) {
 
 std::string enable_force_open(bool value) {
   settings_manager->settings.force_open = value;
-  json.clear();
-  json["force_open"] = settings_manager->settings.force_open;
-  serializeJson(json, message);
+  message = "{\"force_open\":" + std::string(settings_manager->settings.force_open?"true":"false") + "}";
   LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
@@ -804,9 +836,7 @@ std::string enable_syslog(bool value) {
     }
   }
   settings_manager->settings.syslog = syslog?true:false;
-  json.clear();
-  json["syslog"] = settings_manager->settings.syslog;
-  serializeJson(json, message);
+  message = "{\"syslog\":" + std::string(settings_manager->settings.syslog?"true":"false") + "}";
   LOG("[%s] %s\n", TAG, message.c_str());
   return message;
 }
@@ -851,27 +881,31 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     LOG("[%s] %s\n", TAG, json_text.c_str());
     JsonDocument doc;
     deserializeJson(doc, json_text);
+    if (doc["method"] == "enableLog") {webSocketLog = doc["value"].as<bool>(); return;}
     if (doc["method"] == "getSettings") { ws.textAll(settings_manager->getSettings().c_str());
                                           ws.textAll(getStatus().c_str());
                                           ws.textAll(getMediaExists().c_str());
                                           return; }
+    if (doc["method"] == "open") { openAction(); return; }
     if (doc["method"] == "setMode")     { setMode(doc["value"].as<uint8_t>()); return; }
     if (doc["method"] == "setAccept")   { setAccept(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setDelivery") { setDelivery(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setReject")   { setReject(doc["value"].as<bool>()); return; }
-    if (doc["method"] == "setDelaySystem") { setSysDelay(doc["value"].as<uint16_t>()); return; }
+    if (doc["method"] == "setDelaySystem") { ws.textAll(settings_manager->setDelaySystem(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayBeforeAnswer") { ws.textAll(settings_manager->setDelayBeforeAnswer(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayOpen") { ws.textAll(settings_manager->setDelayOpen(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayAfterClose") { ws.textAll(settings_manager->setDelayAfterClose(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setDelayFilter") { ws.textAll(settings_manager->setDelayFilter(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setCallEndDelay") { ws.textAll(settings_manager->setCallEndDelay(doc["value"].as<uint16_t>()).c_str()); return; }
     if (doc["method"] == "setGreetingDelay") { ws.textAll(settings_manager->setGreetingDelay(doc["value"].as<uint16_t>()).c_str()); return; }
-    if (doc["method"] == "setRebootTimeout") { setRebootTimeout(doc["value"].as<uint8_t>()); return; }
-    if (doc["method"] == "setCounterDuration") {setCounterDuration(doc["value"].as<uint16_t>()); return;}
+    if (doc["method"] == "setRebootTimeout") { ws.textAll(settings_manager->setRebootTimeout(doc["value"].as<uint8_t>()).c_str()); return; }
+    if (doc["method"] == "setCounterDuration") { ws.textAll(settings_manager->setCounterDuration(doc["value"].as<uint16_t>()).c_str()); return;}
+    if (doc["method"] == "setImpulseFilter") { ws.textAll(settings_manager->setImpulseFilter(doc["value"].as<uint16_t>()).c_str()); return;}
     if (doc["method"] == "setLed")      { setLed(doc["value"].as<bool>()); return; }
-    if (doc["method"] == "setRoom")     { setRoom(doc["value"].as<uint8_t>()); return; }
+    if (doc["method"] == "setRoom")     { ws.textAll(settings_manager->setAddressCounter(doc["value"].as<uint8_t>()).c_str()); return; }
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setGreeting") { ws.textAll(settings_manager->setGreeting(doc["value"].as<bool>()).c_str()); return; }
+    if (doc["method"] == "setRingtone") { ws.textAll(settings_manager->setRingtone(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setMute")     { setMute(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setRetain")   { ws.textAll(settings_manager->setRetain(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setChildLock"){ ws.textAll(settings_manager->setChildLock(doc["value"].as<bool>()).c_str()); return; }
@@ -918,6 +952,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       if (value == "greeting_allowed") file = GREETING_FILENAME;
       if (value == "delivery_allowed") file = DELIVERY_FILENAME;
       if (value == "access_denied") file = REJECT_FILENAME;
+      if (value == "ringtone_file") file = RINGTONE_FILENAME;
       if (file != "")
         if (aFS.exists((file + ".mp3").c_str()) && aFS.remove((file + ".mp3").c_str())) ws.textAll(getMediaExists().c_str());
         else if (aFS.exists((file + ".wav").c_str()) && aFS.remove((file + ".wav").c_str())) ws.textAll(getMediaExists().c_str());
@@ -962,14 +997,20 @@ void onREST(AsyncWebServerRequest *request) {
         continue;
       }
       if (p->name() == "reboot_timeout") {
-        if (p->value() != "") setRebootTimeout(atoi(p->value().c_str()));
+        if (p->value() != "") ws.textAll(settings_manager->setRebootTimeout(atoi(p->value().c_str())).c_str());
         json["reboot_timeout"] = settings_manager->settings.reboot_timeout;
         continue;
       }
 
       if (p->name() == "counter_duration") {
-        if (p->value() != "") setCounterDuration(atoi(p->value().c_str()));
+        if (p->value() != "") ws.textAll(settings_manager->setCounterDuration(atoi(p->value().c_str())).c_str());
         json["counter_duration"] = settings_manager->settings.counter_duration;
+        continue;
+      }
+
+      if (p->name() == "impulse_filter") {
+        if (p->value() != "") ws.textAll(settings_manager->setImpulseFilter(atoi(p->value().c_str())).c_str());
+        json["impulse_filter"] = settings_manager->settings.impulse_filter;
         continue;
       }
 
@@ -984,12 +1025,12 @@ void onREST(AsyncWebServerRequest *request) {
         continue;
       }
       if (p->name() == "syslog_port") {
-        if (p->value() != "") setSysLogPort(atoi(p->value().c_str()));
+        if (p->value() != "") ws.textAll(settings_manager->setSysLogPort(atoi(p->value().c_str())).c_str());
         json["syslog_port"] = settings_manager->settings.syslog_port;
         continue;
       }
       if (p->name() == "syslog_server") {
-        if (p->value() != "") setSysLogServer(p->value().c_str());
+        if (p->value() != "") ws.textAll(settings_manager->setSysLogServer(p->value().c_str()).c_str());
         json["syslog_server"] = settings_manager->settings.syslog_server;
         continue;
       }
@@ -999,7 +1040,7 @@ void onREST(AsyncWebServerRequest *request) {
         continue;
       }
       if (p->name() == "mqtt_name") {
-        if (p->value() != "") setDevName(p->value().c_str());
+        if (p->value() != "") ws.textAll(settings_manager->setDevName(p->value().c_str()).c_str());
         json["mqtt_name"] = settings_manager->settings.dev_name;
         continue;
       }
@@ -1009,7 +1050,7 @@ void onREST(AsyncWebServerRequest *request) {
         continue;
       }
       if (p->name() == "sys_delay") {
-        if (p->value() != "") setSysDelay(atoi(p->value().c_str()));
+        if (p->value() != "") ws.textAll(settings_manager->setDelaySystem(atoi(p->value().c_str())).c_str());
         json["sys_delay"] = settings_manager->settings.delay_system;
         continue;
       }
@@ -1062,7 +1103,7 @@ void onREST(AsyncWebServerRequest *request) {
         continue;
       }
       if (p->name() == "room") {
-        if (p->value() != "") setRoom(atoi(p->value().c_str()));
+        if (p->value() != "") ws.textAll(settings_manager->setAddressCounter(atoi(p->value().c_str())).c_str());
         json["room"] = settings_manager->settings.address_counter;
         continue;
       }
@@ -1079,10 +1120,11 @@ void onREST(AsyncWebServerRequest *request) {
   request->send(200, "text/html", message.c_str());
 }
 
+uint8_t ClientsCount = 0;
 void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   switch (type) {
-    case WS_EVT_CONNECT: LOG("[%s] WebSocket client #%u connected from %s\n", TAG, client->id(), client->remoteIP().toString().c_str());  break;
-    case WS_EVT_DISCONNECT: LOG("[%s] WebSocket client #%u disconnected\n", TAG, client->id()); break;
+    case WS_EVT_CONNECT: LOG("[%s] WebSocket client #%u connected from %s\n", TAG, client->id(), client->remoteIP().toString().c_str()); ClientsCount++;  break;
+    case WS_EVT_DISCONNECT: LOG("[%s] WebSocket client #%u disconnected\n", TAG, client->id()); if (ClientsCount) ClientsCount--; if (ClientsCount == 0) webSocketLog = false; break;
     case WS_EVT_DATA: handleWebSocketMessage(arg, data, len); break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR: break;
@@ -1213,31 +1255,16 @@ void setup() {
   gpio_set_direction(switch_phone, GPIO_MODE_OUTPUT);
   gpio_set_pull_mode(switch_phone, GPIO_FLOATING);
 
-  pcnt_config_t pcnt_config = {
-      .pulse_gpio_num = detect_line,
-      .ctrl_gpio_num = PCNT_PIN_NOT_USED,
-      .lctrl_mode = PCNT_MODE_KEEP,
-      .hctrl_mode = PCNT_MODE_KEEP,
-      .pos_mode = PCNT_COUNT_DIS,
-      .neg_mode = PCNT_COUNT_INC,
-      .counter_h_lim = 256,
-      .counter_l_lim = 0,
-      .unit = PCNT_UNIT_0,
-      .channel = PCNT_CHANNEL_0,
-  };
-
-  pcnt_unit_config(&pcnt_config);
-  pcnt_set_filter_value(PCNT_UNIT_0, 100); //Добавить в api!!!!
-  pcnt_filter_enable(PCNT_UNIT_0);
-  pcnt_counter_pause(PCNT_UNIT_0);
-  pcnt_counter_clear(PCNT_UNIT_0);
-  pcnt_counter_resume(PCNT_UNIT_0);
-  attachInterrupt(detect_line, call_detector_isr, CHANGE);
   audioOut->SetOutputModeMono(true);
   timer0 = timerBegin(0, 80, true); // 12,5 ns * 80 = 1000ns = 1us
   timerAttachInterrupt(timer0, &TimerHandler0, false); //edge interrupts do not work, use false
   timerAlarmWrite(timer0, 50000, true);
   timerAlarmEnable(timer0);
+
+  /* WatchDog configure*/
+  esp_task_wdt_deinit();
+  esp_task_wdt_init(WDT_TIMEOUT * 1000, true);
+  esp_task_wdt_add(NULL);
 
   /* System startup */
 
@@ -1253,7 +1280,28 @@ void setup() {
   LOG("[%s] %s\n", TAG, "Settings init");
   settings_manager = new SettingsManager(SETTING_FILENAME);
   settings_manager->LoadSettings(aFS);
-  if (currentAction == WAIT) gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable); 
+  if (currentAction == WAIT) gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
+
+  pcnt_config_t pcnt_config = {
+      .pulse_gpio_num = detect_line,
+      .ctrl_gpio_num = PCNT_PIN_NOT_USED,
+      .lctrl_mode = PCNT_MODE_KEEP,
+      .hctrl_mode = PCNT_MODE_KEEP,
+      .pos_mode = PCNT_COUNT_DIS,
+      .neg_mode = PCNT_COUNT_INC,
+      .counter_h_lim = 256,
+      .counter_l_lim = 0,
+      .unit = PCNT_UNIT_0,
+      .channel = PCNT_CHANNEL_0,
+  };
+  pcnt_unit_config(&pcnt_config);
+  pcnt_set_filter_value(PCNT_UNIT_0, settings_manager->settings.impulse_filter);
+  pcnt_filter_enable(PCNT_UNIT_0);
+  pcnt_counter_pause(PCNT_UNIT_0);
+  pcnt_counter_clear(PCNT_UNIT_0);
+  pcnt_counter_resume(PCNT_UNIT_0);
+  attachInterrupt(detect_line, call_detector_isr, CHANGE);
+
   LOG("[%s] %s\n", TAG, "WiFi init");
   wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
   if (!hw_status.web_services_init) web_server_init();
@@ -1276,6 +1324,7 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset();
   if (wifi_manager->Connected()) {
       if (!hw_status.time_configure) {
         ws.textAll(getStatus().c_str());
@@ -1339,8 +1388,8 @@ void loop() {
           LOG("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
         } else LOG("[%s] Select address: %d, counter: not detect\n", TAG, settings_manager->settings.address_counter);
       }
-    } else if (finishCounter) {
-      if (millis() - reset_time > settings_manager->settings.counter_duration) {
+    } else if (finishCounter) { //Если досчитали
+      if (millis() - reset_time > settings_manager->settings.counter_duration) { //Если прошло немного времени, то скидываем флаги, для новых подвигов
         syncCounter = false;
         finishCounter = false;
       }
