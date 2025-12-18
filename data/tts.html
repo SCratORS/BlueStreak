@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>Yandex Alice TTS</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preload" href="https://yastatic.net/s3/web-alice/fonts/ys/4/text-geo-regular-optimized-2.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://yastatic.net/s3/web-alice/fonts/ys/4/text-geo-medium-optimized-2.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://yastatic.net/s3/web-alice/fonts/ys/4/text-geo-bold-optimized-2.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="icon" href="https://yastatic.net/s3/alicestatic/_/v2/static/media/favicon.fd9fd858.svg" type="image/svg+xml">
+    <style nonce="" data-role="fonts-css">@font-face{font-family:"YS Geo";src:url(https://yastatic.net/s3/web-alice/fonts/ys/4/text-geo-regular-optimized-2.woff2)format("woff2");font-weight:400;font-style:normal;font-stretch:normal;font-display:optional}@font-face{font-family:"YS Geo";src:url(https://yastatic.net/s3/web-alice/fonts/ys/4/text-geo-medium-optimized-2.woff2)format("woff2");font-weight:500;font-style:normal;font-stretch:normal;font-display:optional}@font-face{font-family:"YS Geo";src:url(https://yastatic.net/s3/web-alice/fonts/ys/4/text-geo-bold-optimized-2.woff2)format("woff2");font-weight:700;font-style:normal;font-stretch:normal;font-display:optional}html.i-font_loaded {letter-spacing:.013em}</style>
+    <link rel="stylesheet" href="style_tts.css">
+</head>
+<body>
+    <div class="main">
+        <img src="images/alice_logo.png" width="128px">
+        <br><br><br>
+        <div class="title">Озвучивание текста голосом Яндекс Алисы</div>
+        <br><br>
+        <input type="text" id="message" name="message" maxlength="1000"
+            placeholder="Введите текст который необходимо озвучить" required>
+        <div class="wrap">
+            <button onclick="tts(document.getElementById('message').value)">Генерировать аудиофайл</button>
+        </div>
+        <p>
+            <a href="https://yandex.cloud/ru/docs/speechkit/tts/request" style="text-decoration: none;">Yandex SpeechKit</a>
+        </p>
+    </div>
+</body>
+<script src="scripts/script.js"></script>
+</html>

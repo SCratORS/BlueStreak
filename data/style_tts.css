@@ -1,0 +1,62 @@
+/*style.css*/
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, YS Geo, BlinkMacSystemFont, Arial, Helvetica, "Arial Unicode MS", sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    background: #191919;
+    flex-direction: column;
+    margin: 0;
+}
+
+.main {
+    width: 500px;
+    text-align: center;
+}
+
+.title {
+    color: #c4c4c4;
+    font-size: 18px;
+}
+
+input {
+    display: block;
+    width: 100%;
+    margin-bottom: 15px;
+    padding: 16px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 14px;
+    background: #292929;
+    font-size: 16px;
+    color: #c4c4c4;
+    font-family: -apple-system, YS Geo, BlinkMacSystemFont, Arial, Helvetica, "Arial Unicode MS", sans-serif;
+}
+
+button {
+    padding: 14px;
+    border-radius: 14px;
+    margin-top: 15px;
+    margin-bottom: 15px;
+    border: none;
+    color: white;
+    cursor: pointer;
+    background-color: #8967ff;
+    width: 100%;
+    font-size: 16px;
+    font-family: -apple-system, YS Geo, BlinkMacSystemFont, Arial, Helvetica, "Arial Unicode MS", sans-serif;
+}
+
+a {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    font-family: -apple-system, YS Geo, BlinkMacSystemFont, Arial, Helvetica, "Arial Unicode MS", sans-serif;
+}
+
+.wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
