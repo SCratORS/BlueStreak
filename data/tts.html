@@ -15,12 +15,13 @@
     <div class="main">
         <img src="images/alice_logo.png" width="128px">
         <br><br><br>
-        <div class="title">Озвучивание текста голосом Яндекс Алисы</div>
-        <br><br>
+        <div class="title">Привет! Я не Алиса,<br>но я умею говорить голосом Яндекс Алисы.</div>
+        <div class="sub-title">Напиши в поле ниже любой текст на русском языке состоящий не более чем из 1000 символов и нажми кнопку генерации. Произойдет генерация аудиофайла в формате mp3 и автоматическое его скачивание.</div>
+        <br>
         <input type="text" id="message" name="message" maxlength="1000"
-            placeholder="Введите текст который необходимо озвучить" required>
+            placeholder="Введите текст, который необходимо озвучить" required>
         <div class="wrap">
-            <button onclick="tts(document.getElementById('message').value)">Генерировать аудиофайл</button>
+            <button onclick="tts(document.getElementById('message').value)">Генерировать и скачать аудиофайл</button>
         </div>
         <p>
             <a href="https://yandex.cloud/ru/docs/speechkit/tts/request" style="text-decoration: none;">Yandex SpeechKit</a>
@@ -28,5 +29,4 @@
     </div>
 </body>
 <script src="scripts/tts.js"></script>
-
 </html>

@@ -12,13 +12,31 @@ body {
 }
 
 .main {
-    width: 500px;
+    width: 90%;
     text-align: center;
+    max-width: 512px;
 }
+
+img {
+
+    box-shadow: 0 0 150px 5px #8967ff;
+    border-radius: 100%;
+}
+
+@keyframes moveShadow {  
+    0% { box-shadow: 0 0 50px 5px #8967ff; }  
+    50% { box-shadow: 0 0 150px 5px #8967ff; }
+    100% { box-shadow: 0 0 50px 5px #8967ff; }  
+}  
 
 .title {
     color: #c4c4c4;
     font-size: 18px;
+}
+.sub-title {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 14px;
+    margin-top: 14px;
 }
 
 input {
