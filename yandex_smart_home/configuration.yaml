@@ -7,7 +7,7 @@ yandex_smart_home:
     binary_sensor.smartintercom_state:
       name: Домофон
       room: Прихожая
-      type: devices.types.openable
+      type: devices.types.openable.intercom
       modes:
         program:
           normal: [normal]
@@ -45,3 +45,4 @@ yandex_smart_home:
           turn_off:
             service: switch.turn_on
             entity_id: switch.smartintercom_sound
+
