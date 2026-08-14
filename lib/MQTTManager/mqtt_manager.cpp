@@ -40,7 +40,7 @@ void MQTTManager::handle() {
             mqtt_client->disconnect();
             mqtt_client->setServer(server.c_str(), port);
             LOG("[%s] Attempting MQTT connection: %s:%d\n", TAG, server.c_str(), port);
-            if (mqtt_client->connect(client_id.c_str(), login.c_str(), passwd.c_str())) {
+            if (mqtt_client->connect(client_id.c_str(), login.c_str(), passwd.c_str(), (device_info->dev_name+"/status").c_str(), 1, false, "offline")) {
                 previousMQTTMillis = millis();
                 last_error = 0;
                 device_discovery();

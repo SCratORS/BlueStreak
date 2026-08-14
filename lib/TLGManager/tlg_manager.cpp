@@ -92,7 +92,7 @@ bool TLGManager::sendOpenKeyboard(std::string chat_id, std::string message) {
 
 bool TLGManager::sendModeKeyboard(bool edit, std::string chat_id) {
     JsonDocument responce;
-    deserializeJson(responce, (char*)post("{\"method\":\""+std::string(edit?"editMessageText":"sendMessage")+"\","+std::string(edit?std::string("\"message_id\":"+std::to_string(menu_id)+","):"")+"\"chat_id\":\""+chat_id+"\",\"text\":\"Выбор постоянного режима работы:\",\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Не активен\",\"callback_data\":\"mode_0\"}],[{\"text\":\"Сброс вызова\",\"callback_data\":\"mode_1\"}],[{\"text\":\"Открывать всегда\",\"callback_data\":\"mode_2\"}]]}}").c_str());
+    deserializeJson(responce, (char*)post("{\"method\":\""+std::string(edit?"editMessageText":"sendMessage")+"\","+std::string(edit?std::string("\"message_id\":"+std::to_string(menu_id)+","):"")+"\"chat_id\":\""+chat_id+"\",\"text\":\"Выбор действия по умолчанию:\",\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Не активен\",\"callback_data\":\"mode_0\"}],[{\"text\":\"Сбрасывать вызова\",\"callback_data\":\"mode_1\"}],[{\"text\":\"Открывать всегда\",\"callback_data\":\"mode_2\"}],[{\"text\":\"Управление с трубки\",\"callback_data\":\"mode_3\"}]]}}").c_str());
     return (responce!="") && (responce["ok"].as<bool>());
  }
 
@@ -101,15 +101,11 @@ bool TLGManager::sendSettingsPanel(bool edit, std::string chat_id){
     JsonDocument responce;
     deserializeJson(responce, (char*)post("{\"method\":\""+std::string(edit?"editMessageText":"sendMessage")+
     "\","+std::string(edit?std::string("\"message_id\":"+std::to_string(menu_id)+","):"")+
-    "\"chat_id\":\""+chat_id+"\",\"text\":\"Настройки\",\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\""+mute_name+
-    "\",\"callback_data\":\"mute\"},{\"text\":\""+std::string(settings_manager->settings.mute?"🟢 ":"⚫️ ")+
-    "\",\"callback_data\":\"mute\"}],[{\"text\":\""+sound_name+
+    "\"chat_id\":\""+chat_id+"\",\"text\":\"Настройки\",\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\""+sound_name+
     "\",\"callback_data\":\"sound\"},{\"text\":\""+std::string(settings_manager->settings.sound?"🟢 ":"⚫️ ")+
     "\",\"callback_data\":\"sound\"}],[{\"text\":\""+led_name+
     "\",\"callback_data\":\"led\"},{\"text\":\""+std::string(settings_manager->settings.led?"🟢 ":"⚫️ ")+
-    "\",\"callback_data\":\"led\"}],[{\"text\":\""+phone_disable_name+
-    "\",\"callback_data\":\"phone_disable\"},{\"text\":\""+std::string(settings_manager->settings.phone_disable?"🟢 ":"⚫️ ")+
-    "\",\"callback_data\":\"phone_disable\"}],[{\"text\":\""+std::string(access_code_name) + " " + std::string(settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code)+
+    "\",\"callback_data\":\"led\"}],[{\"text\":\""+std::string(access_code_name) + " " + std::string(settings_manager->settings.access_code==""?"------":settings_manager->settings.access_code)+
     "\",\"callback_data\":\"generate_code\"},{\"text\":\""+access_code_delete_name+
     "\",\"callback_data\":\"delete_code\"}]]}}").c_str());
     return (responce!="") && (responce["ok"].as<bool>());

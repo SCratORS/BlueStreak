@@ -143,17 +143,11 @@ progress {
 .icon_clock {
   background-image: url(images/clock.svg);
 }
-.icon_phone-off {
-  background-image: url(images/phone-off.svg);
-}
 .icon_led-on {
   background-image: url(images/led-on.svg);
 }
 .icon_microphone {
   background-image: url(images/microphone.svg);
-}
-.icon_volume_off {
-  background-image: url(images/volume-off.svg);
 }
 .icon_bell_ring {
   background-image: url(images/bell-ring.svg);
@@ -179,8 +173,8 @@ progress {
 .icon_lan-connect {
   background-image: url(images/lan-connect.svg);
 }
-.icon_bee {
-  background-image: url(images/bee.svg);
+.icon_mqtt {
+  background-image: url(images/mqtt.svg);
 }
 .icon_counter {
   background-image: url(images/counter.svg);

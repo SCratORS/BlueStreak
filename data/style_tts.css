@@ -18,16 +18,9 @@ body {
 }
 
 img {
-
     box-shadow: 0 0 150px 5px #8967ff;
     border-radius: 100%;
 }
-
-@keyframes moveShadow {  
-    0% { box-shadow: 0 0 50px 5px #8967ff; }  
-    50% { box-shadow: 0 0 150px 5px #8967ff; }
-    100% { box-shadow: 0 0 50px 5px #8967ff; }  
-}  
 
 .title {
     color: #c4c4c4;

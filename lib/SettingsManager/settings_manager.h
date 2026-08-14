@@ -2,17 +2,18 @@
 #define led_status    GPIO_NUM_16        // Индикатор статуса API
 #define led_indicator GPIO_NUM_13        // Дополнительный индикатор, который будет показывать режимы и прочее.
 #define detect_line   GPIO_NUM_12        // Пин детектора вызова
+#define ape_line      GPIO_NUM_5         // APE пин цифровой адресации
 #define button_boot   GPIO_NUM_0         // Кнопка управления платой и перевода в режим прошивки
 #define relay_line    GPIO_NUM_14        // Пин "Переключение линии, плата/трубка"
+#define relay_phone   GPIO_NUM_15        // Пин "Переключение трубки" только для commax
 #define switch_open   GPIO_NUM_17        // Пин "Открытие двери"
 #define switch_phone  GPIO_NUM_4         // Пин "Трубка положена/поднята"
-#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.2.7-Web Insider Preview 10.2025 Firmware"
-#define COPYRIGHT "© SCHome (SmartHome Devices), 2025"
-#define modes_name "Постоянный режим работы"
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION "BlueStreak™ 2.2.9-Web Insider Preview 07.2026 Firmware"
+#define COPYRIGHT "© SCHome (SmartHome Devices), 2026"
+#define modes_name "Действие по умолчанию"
 #define sound_name "Аудиосообщения"
 #define led_name "Светоиндикация"
 #define mute_name "Беззвучный режим"
-#define phone_disable_name "Отключить трубку"
 #define accept_call_name "Открыть дверь"
 #define reject_call_name "Сбросить вызов"
 #define delivery_call_name "Открыть курьеру"
@@ -48,6 +49,7 @@ class SettingsManager {
         void LoadSettings(fs::FS aFS);
         void SaveSettings(fs::FS aFS);
         void ResetSettings();
+        void JsonFill();
         uint8_t last_error = 0;
         uint64_t access_code_expires = 0;
         struct {
@@ -58,14 +60,12 @@ class SettingsManager {
             bool sound = true;
             bool greeting = false;
             bool ringtone = false;
-            bool mute = false;
-            bool phone_disable = false;
             bool ftp = false;
             bool syslog = false;
             bool force_open = false;
             uint16_t syslog_port = 514;
             std::string syslog_server = "";
-            uint8_t modes = 0;
+            uint8_t modes = 3;
             uint8_t server_type = 0;
             uint16_t delay_system = 500;
             uint16_t delay_before = 1000;
@@ -93,7 +93,8 @@ class SettingsManager {
             uint16_t access_code_lifetime = 0;
             uint8_t address_counter = 0;
             uint8_t reboot_timeout = 0;
-            uint16_t counter_duration = 190;
+            uint16_t counter_duration = 500;
+            uint16_t sync_duration = 200;
             uint16_t impulse_filter = 100;
         } settings;
         std::string getSettings();

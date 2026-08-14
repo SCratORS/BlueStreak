@@ -28,10 +28,11 @@
           <div class="custom-select text">
             <select title="modes" action="setMode" id="modes">
               <option value="0">Не активен</option>
-              <option value="1">Сброс вызова</option>
+              <option value="1">Сбрасывать вызов</option>
               <option value="2">Открывать всегда</option>
+              <option value="3">Управление с трубки</option>
             </select>
-            <div class="text sub-title combobox-title">Постоянный режим работы:</div>
+            <div class="text sub-title combobox-title">Действие по умолчанию:</div>
           </div>
       </div>
 
@@ -156,7 +157,7 @@
           <input id="address_counter" type="number" class="text right" title="address_counter" placeholder="" onchange="sendCommand('setRoom',this.value)">
         </div>
       </div>
-      <div class = "panel top control add-margin no-padding-bottom">
+      <div class = "panel top control no-padding-bottom">
         <div class = "icon icon_led-on"></div>
         <div class = "text">Светоиндикация<div class = "text sub-title">Индикация встроенными светодиодами</div></div>
         <label class="switch">
@@ -185,22 +186,6 @@
         <div class = "text">Рингтон<div class = "text sub-title">Воспроизводить рингтон на блок вызова COMMAX</div></div>
         <label class="switch">
           <input id="ringtone" type="checkbox" title="ringtone" placeholder="" onclick="sendCommand('setRingtone',this.checked)">
-          <span class="slider round"></span>
-        </label>
-      </div>
-      <div class = "panel top control add-margin no-padding-bottom">
-        <div class = "icon icon_volume_off"></div>
-        <div class = "text">Беззвучный режим<div class = "text sub-title">Отключать физическую трубку при вызове</div></div>
-        <label class="switch">
-          <input id="mute" type="checkbox" title="mute" placeholder="" onclick="sendCommand('setMute',this.checked)">
-          <span class="slider round"></span>
-        </label>
-      </div>
-      <div class = "panel top control add-margin no-padding-bottom">
-        <div class = "icon icon_phone-off"></div>
-        <div class = "text">Отключить трубку<div class = "text sub-title">Не использовать физическую трубку</div></div>
-        <label class="switch">
-          <input id="phone_disable" type="checkbox" title="phone_disable" placeholder="" onclick="sendCommand('setPhoneDisable',this.checked)">
           <span class="slider round"></span>
         </label>
       </div>
@@ -253,7 +238,7 @@
       <div id="mqtt_settings" hidden>
         <div class = "panel text sub-title" style="padding-top: var(--3wp);">Конфигурация MQTT-клиента</div>
         <div class = "panel top control no-padding-bottom">
-          <div class = "icon icon_bee"></div>
+          <div class = "icon icon_mqtt"></div>
           <div class = "text">Сервер MQTT<div class = "text sub-title">Адрес сервера в сети</div></div>
           <div class="custom-input right">
             <input id="mqtt_server" type="text" class="text right" title="mqtt_serever" placeholder="Адрес MQTT сервера" onchange="sendCommand('setMQTTServer',this.value)">
@@ -425,7 +410,7 @@
       <div id="access_denied_progress" class="add-margin-top-invert" hidden><progress id="progressBar" value="50" max="100"></progress></div>
       <div class = "panel top control add-margin-top no-padding-bottom ">
         <div class = "icon icon_mp3"></div>
-        <div class = "text">Аудиофайл рингтона<div class = "text sub-title">Воспроизводимый при определении вызова</div></div>
+        <div class = "text">Аудиофайл рингтона<div class = "text sub-title">Воспроизводимый на блок вызова COMMAX</div></div>
         <div class = "horizontal-grid right">
           <input type="file" id="ringtone_file" accept=".mp3, .wav" hidden onchange="uploadMedia(this);">
           <audio id="ringtone_play" src="" type="audio/mpeg"></audio>   
