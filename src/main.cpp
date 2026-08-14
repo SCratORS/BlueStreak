@@ -1,3 +1,9 @@
+/*
+TO-DO:
+- COMMAX: после вопроизведения рингтона, на долю секунды проскакивате сигнал открытия.
+- COMMAX: после отключения режимов "без трубки", срабатывает вызов на панели и на долю сек. проскакивает сигнал открытия.
+*/
+
 #include <ESPAsyncWebserver.h>
 #include <esp_task_wdt.h>
 #include <Update.h>
@@ -29,7 +35,7 @@
 esp_err_t ESP32_ERROR;
 
 static const char* TAG = "MAIN";
-std::string mode_name[3] = {"Не активен","Сброс вызова","Открывать всегда"}; 
+std::string mode_name[4] = {"Не активен","Сбрасывать вызов","Открывать всегда", "Управление с трубки"}; 
 enum {WAIT, CALLING, RING, CALL, SWUP, VOICE, PREOPEN, SWOPEN, SWCLOSE, GREETING, GREETING_VOICE, DROP, ENDING, RESET};
 static uint8_t currentAction = WAIT;
 static uint32_t detectMillis = 0;
@@ -78,8 +84,6 @@ Switch * delivery_once;
 Button * open_door;
 Switch * sound;
 Switch * led;
-Switch * mute;
-Switch * phone_disable;
 BinarySensor * line_detect;
 Sensor * line_status;
 Select * modes;
@@ -176,7 +180,8 @@ void setLineDetect(bool value){
     else if (settings_manager->settings.reject_call) tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚷 Входящий вызов в домофон!\nСбрасываю вызов.", true);
     else {
       switch (settings_manager->settings.modes) {
-        case 0: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🛎 Входящий вызов в домофон!", true); break;
+        case 0:
+        case 3: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🛎 Входящий вызов в домофон!", true); break;
         case 1: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "🚷 Входящий вызов в домофон!\nСбрасываю вызов.", true); break;
         case 2: tlg_manager->sendMessage(settings_manager->settings.tlg_user, "✅ Входящий вызов в домофон!\nОткрываю дверь.", true); break;
       }
@@ -284,7 +289,7 @@ void IRAM_ATTR TimerHandler0() {
             case 40: ledIndicatorCounter = 0; break;
             default: if (ledIndicatorCounter > 40) ledIndicatorCounter = 0; break;
         }
-      } else if (settings_manager->settings.mute) {
+      } else if (!settings_manager->settings.modes) {
         ledIndicatorCounter++;
         if (ledIndicatorCounter < 40) {
             ledcWrite(0, ledIndicatorCounter * 6);
@@ -307,75 +312,67 @@ void deleteAudio(){
   delete audioFile; audioFile = nullptr; 
 }
 
+void switch_line(bool val) {
+  if (val) {
+    gpio_set_level(relay_line, 1);
+    delay(10);
+    gpio_set_level(relay_phone, 1);
+  } else {
+    gpio_set_level(relay_phone, 1);
+    delay(10);
+    gpio_set_level(relay_line, 1);
+  }
+}
 
-uint64_t reset_time = 0;
+uint64_t sync_time = 0;
 bool ringplay = false;
 void calling_detect() {
   if (currentAction == WAIT) {
-    if (settings_manager->settings.mute && 
-        (settings_manager->settings.accept_call ||
-        settings_manager->settings.reject_call ||
-        settings_manager->settings.modes )) {
-      gpio_set_level(switch_phone, 1);  
-      gpio_set_level(relay_line, 1);
-    } 
     ringplay = false;
     detectMillis = millis();
     currentAction = CALLING;
   }
 }
 
-
 uint64_t last_time_detect = 0;
-void IRAM_ATTR call_detector_isr() {
-  if (gpio_get_level(detect_line)) {
+void IRAM_ATTR ape_detector_isr() {
+  if (!settings_manager->settings.address_counter) return;
+  if (!gpio_get_level(ape_line)) {
     last_time_detect = millis();
     return;
   }
-  /*
-  reset_time = millis();
-  if (settings_manager->settings.address_counter) {
-    if (reset_time - last_time_detect > 200) syncCounter = !syncCounter;
+
+  if (millis() - last_time_detect > settings_manager->settings.sync_duration) {
     if (currentAction == WAIT) {
-      if (syncCounter) {
-        finishCounter = false;
-        currentAddressCounter = 0;
-        pcnt_counter_clear(PCNT_UNIT_0);
-      }
-    }
-    if (currentAction == CALLING) {
-      if (!syncCounter && finishCounter && !triggerCounter) currentAction = RESET;
-    }
-  } else {
-    if (currentAction == WAIT) calling_detect();
-  }
-*/
-  reset_time = millis();
-    if (currentAction == WAIT) {
-    if (settings_manager->settings.address_counter) {
       if (!syncCounter) {
-        syncCounter = true;
-        currentAddressCounter = 0;
-        pcnt_counter_clear(PCNT_UNIT_0);
-        finishCounter = false;
+          sync_time = millis();
+          syncCounter = true;
+          currentAddressCounter = 0;
+          pcnt_counter_clear(PCNT_UNIT_0);
+          pcnt_counter_resume(PCNT_UNIT_0);
+          finishCounter = false;
       }
-    } else calling_detect();
+    } else if (triggerCounter && currentAction == CALLING) {
+      triggerCounter = false;
+      finishCounter = false;
+      syncCounter = false;
+      currentAction = RESET;
+    }
   }
-  //Если триггер сработал (т.е. мы с цифрой имеем дело, а значит синхра уже была и счетчик закончил счет)
-  //И мы находимся в режиме детекции вызова, но отработка не запущена, и поймали сигнал отбоя, то
-  //сравниваем время импульса с длиной синхро импульса, и сбрасываем детектор если это оно.
-  if (triggerCounter && currentAction == CALLING) {
-      if (reset_time - last_time_detect > settings_manager->settings.counter_duration) {
-        triggerCounter = false;
-        currentAction = RESET;
-      }
+}
+
+uint64_t reset_time = 0;
+void IRAM_ATTR call_detector_isr() {
+  if (!settings_manager->settings.address_counter) {
+    reset_time = millis();
+    if (currentAction == WAIT) calling_detect();
   }
 }
 
 void phone_disable_action () {
     if (currentAction == WAIT) {
-      gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
-      gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
+      gpio_set_level(switch_phone, 1); 
+      switch_line(!settings_manager->settings.address_counter && settings_manager->settings.modes<3);
     }
 }
 
@@ -411,14 +408,16 @@ void doAction(uint32_t timer) {
   switch (currentAction) {
     case WAIT:  break;
     case CALLING: if (!triggerCounter && millis() - reset_time > settings_manager->settings.call_end_delay) currentAction = RESET;
-                  if (timer > settings_manager->settings.delay_filter && !gpio_get_level(detect_line)) {
+                  if (timer > settings_manager->settings.delay_filter && (settings_manager->settings.address_counter?true:!gpio_get_level(detect_line))) {
+                  gpio_set_level(switch_phone, 1);  
                     if (!device_status.line_detect) {
                       setLineDetect(true);
                       setLineStatus(l_status_call);
                     }
                     if (settings_manager->settings.accept_call ||
                         settings_manager->settings.reject_call ||
-                        settings_manager->settings.modes ) {
+                        settings_manager->settings.modes == 1 ||
+                        settings_manager->settings.modes == 2 ) {
                           currentAction = CALL;
                           detectMillis = millis(); 
                           timerAction += settings_manager->settings.delay_system;      
@@ -427,8 +426,8 @@ void doAction(uint32_t timer) {
                             ringplay = true;
                             if (audioPlayer) deleteAudio();
                             if (initAudio(RINGTONE_FILENAME)) {
-                              gpio_set_level(switch_phone, 0);  
-                              gpio_set_level(relay_line, 1);
+                              gpio_set_level(switch_phone, 0);
+                              switch_line(true);
                               currentAction = RING;
                               LOG("[%s] %s\n", TAG, "Play");
                             }
@@ -437,13 +436,14 @@ void doAction(uint32_t timer) {
                   } break;
     case RING:    if (!audioPlayer->loop()) {
                     deleteAudio();
-                    gpio_set_level(relay_line, 0);
+                    switch_line(false);
                     ringplay = true;
                     currentAction = CALLING;
                   } 
                   if (settings_manager->settings.accept_call ||
                     settings_manager->settings.reject_call ||
-                    settings_manager->settings.modes ) {
+                    settings_manager->settings.modes == 1 ||
+                    settings_manager->settings.modes == 2 ) {
                       currentAction = CALL;
                       detectMillis = millis(); 
                       timerAction += settings_manager->settings.delay_system;      
@@ -451,7 +451,7 @@ void doAction(uint32_t timer) {
                   break;
     case CALL:  if (timer > timerAction) {
                   gpio_set_level(switch_phone, 0);  
-                  gpio_set_level(relay_line, 1);
+                  switch_line(true);
                   setLineStatus(l_status_answer);
                   timerAction += settings_manager->settings.delay_before;
                   currentAction = SWUP;
@@ -479,7 +479,7 @@ void doAction(uint32_t timer) {
                 } break;
     case PREOPEN: if (timer > timerAction) currentAction = SWOPEN;
                   break;
-    case SWOPEN:  if (settings_manager->settings.force_open) gpio_set_level(relay_line, 0);
+    case SWOPEN:  if (settings_manager->settings.force_open) switch_line(false);
                   else gpio_set_level(switch_open, 1);
                   setLineStatus(l_status_open);
                   timerAction += (audioLength + settings_manager->settings.delay_open);
@@ -495,7 +495,7 @@ void doAction(uint32_t timer) {
                       if (initAudio(GREETING_FILENAME)) {
                         setLineStatus(l_status_answer);
                         currentAction = GREETING_VOICE;
-                        if (settings_manager->settings.force_open) gpio_set_level(relay_line, 1);
+                        if (settings_manager->settings.force_open) switch_line(true);
                         else gpio_set_level(switch_open, 0);
                         timerAction += settings_manager->settings.greeting_delay;
                         break;
@@ -511,7 +511,7 @@ void doAction(uint32_t timer) {
                     }
                   } break;
     case DROP:  if (timer > timerAction) {
-                  if (settings_manager->settings.force_open) gpio_set_level(relay_line, 1);
+                  if (settings_manager->settings.force_open) switch_line(true);
                   else gpio_set_level(switch_open, 0);
                   gpio_set_level(switch_phone, 1); 
                   setLineStatus(l_status_reject);
@@ -520,8 +520,8 @@ void doAction(uint32_t timer) {
                 } break;
     case ENDING:if (timer > timerAction) currentAction = RESET;
                 break;
-    case RESET: gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
-                gpio_set_level(switch_phone, settings_manager->settings.phone_disable); 
+    case RESET: switch_line(!settings_manager->settings.address_counter && settings_manager->settings.modes<3);
+                gpio_set_level(switch_phone, 1); 
                 gpio_set_level(switch_open, 0);
                 settings_manager->settings.accept_call = false;
                 settings_manager->settings.delivery = false;
@@ -564,6 +564,7 @@ void openAction(){
 
 void setMode(uint8_t value) {
   ws.textAll(settings_manager->setMode(value).c_str());
+  phone_disable_action();
   if (modes) modes->publishValue();
 }
 
@@ -590,17 +591,6 @@ void setReject(bool value) {
 void setLed(bool value) {
   ws.textAll(settings_manager->setLed(value).c_str());
   if (led) led->publishValue();
-}
-
-void setMute(bool value) {
-  ws.textAll(settings_manager->setMute(value).c_str());
-  if (mute) mute->publishValue();
-}
-
-void setPhoneDisable(bool value) {
-  ws.textAll(settings_manager->setPhoneDisable(value).c_str());
-  if (phone_disable) phone_disable->publishValue();
-  phone_disable_action();
 }
 
 void setSound(bool value) {
@@ -693,13 +683,12 @@ void tlg_callback_query(std::string from_id, std::string chat_id, std::string ca
   else if (callback_query == "mode_0") { setMode(0); tlg_manager->sendControlPanel(true, chat_id);}
   else if (callback_query == "mode_1") { setMode(1); tlg_manager->sendControlPanel(true, chat_id);}
   else if (callback_query == "mode_2") { setMode(2); tlg_manager->sendControlPanel(true, chat_id);}
+  else if (callback_query == "mode_3") { setMode(3); tlg_manager->sendControlPanel(true, chat_id);}
   else if (callback_query == "accept") { setAccept(!settings_manager->settings.accept_call); tlg_manager->sendControlPanel(true, chat_id);}
   else if (callback_query == "delivery") { setDelivery(!settings_manager->settings.delivery); tlg_manager->sendControlPanel(true, chat_id);}
   else if (callback_query == "reject") { setReject(!settings_manager->settings.reject_call); tlg_manager->sendControlPanel(true, chat_id);}
-  else if (callback_query == "mute") { setMute(!settings_manager->settings.mute); tlg_manager->sendSettingsPanel(true, chat_id);}
   else if (callback_query == "sound") { setSound(!settings_manager->settings.sound); tlg_manager->sendSettingsPanel(true, chat_id);}
   else if (callback_query == "led") { setLed(!settings_manager->settings.led); tlg_manager->sendSettingsPanel(true, chat_id);}
-  else if (callback_query == "phone_disable") { setPhoneDisable(!settings_manager->settings.phone_disable); tlg_manager->sendSettingsPanel(true, chat_id);}
   else if (callback_query == "delete_code") { tlg_code_delete(); tlg_manager->sendSettingsPanel(true, chat_id); }
 }
 
@@ -712,8 +701,6 @@ void mqtt_callback(char* topic, uint8_t* payload, uint32_t length) {
   if (strTopic == modes->callback_topic) setMode(settings_manager->settings.modes);
   else if (strTopic == led->callback_topic) setLed(settings_manager->settings.led); 
   else if (strTopic == sound->callback_topic) setSound(settings_manager->settings.sound); 
-  else if (strTopic == phone_disable->callback_topic) setPhoneDisable(settings_manager->settings.phone_disable);
-  else if (strTopic == mute->callback_topic) setMute(settings_manager->settings.mute);
   else if (strTopic == accept_once->callback_topic) setAccept(settings_manager->settings.accept_call);
   else if (strTopic == delivery_once->callback_topic) setDelivery(settings_manager->settings.delivery);
   else if (strTopic == reject_once->callback_topic) setReject(settings_manager->settings.reject_call);
@@ -725,11 +712,8 @@ void entity_configuration(PubSubClient * mqtt_client) {
   reject_once = new Switch("reject_call", mqtt_client, &settings_manager->settings.reject_call, &settings_manager->settings.mqtt_retain);
   delivery_once = new Switch("delivery_call", mqtt_client, &settings_manager->settings.delivery, &settings_manager->settings.mqtt_retain);
   open_door = new Button("oper_door", mqtt_client, nullptr, &settings_manager->settings.mqtt_retain);
-
   sound = new Switch("sound", mqtt_client, &settings_manager->settings.sound, &settings_manager->settings.mqtt_retain);
   led = new Switch("led", mqtt_client, &settings_manager->settings.led, &settings_manager->settings.mqtt_retain);
-  mute = new Switch("mute", mqtt_client, &settings_manager->settings.mute, &settings_manager->settings.mqtt_retain);
-  phone_disable = new Switch("phone_disable", mqtt_client, &settings_manager->settings.phone_disable, &settings_manager->settings.mqtt_retain);
   line_detect = new BinarySensor("line_detect", mqtt_client, &device_status.line_detect, &settings_manager->settings.mqtt_retain);
   line_status = new Sensor("line_status", mqtt_client, &device_status.line_status, &settings_manager->settings.mqtt_retain);
   modes = new Select("modes", mqtt_client, &settings_manager->settings.modes, &settings_manager->settings.mqtt_retain);
@@ -737,6 +721,7 @@ void entity_configuration(PubSubClient * mqtt_client) {
   modes->items_list.insert(std::make_pair(0, mode_name[0]));
   modes->items_list.insert(std::make_pair(1, mode_name[1]));
   modes->items_list.insert(std::make_pair(2, mode_name[2]));
+  modes->items_list.insert(std::make_pair(3, mode_name[3]));
   modes->ic = "mdi:deskphone";modes->friendly_name = modes_name; mqtt_manager->addEntity(modes);
 
   line_status->ic = "mdi:bell";line_status->friendly_name = "Статус линии"; mqtt_manager->addEntity(line_status);
@@ -747,8 +732,6 @@ void entity_configuration(PubSubClient * mqtt_client) {
   line_detect->friendly_name = "Детектор вызова"; mqtt_manager->addEntity(line_detect);
   sound->ent_cat = "config";sound->ic = "mdi:microphone-message";sound->friendly_name = sound_name; mqtt_manager->addEntity(sound);
   led->ent_cat = "config";led->ic = "mdi:led-on";led->friendly_name = led_name; mqtt_manager->addEntity(led);
-  mute->ent_cat = "config";mute->ic = "mdi:volume-off";mute->friendly_name = mute_name; mqtt_manager->addEntity(mute);
-  phone_disable->ent_cat = "config";phone_disable->ic = "mdi:phone-off";phone_disable->friendly_name = phone_disable_name; mqtt_manager->addEntity(phone_disable);
 }
 
 void entity_delete() {
@@ -758,8 +741,6 @@ void entity_delete() {
   delete(open_door);open_door = nullptr;
   delete(sound);sound = nullptr;
   delete(led);led = nullptr;
-  delete(mute);mute = nullptr;
-  delete(phone_disable);phone_disable = nullptr;
   delete(line_detect);line_detect = nullptr;
   delete(line_status);line_status = nullptr;
   delete(modes);modes = nullptr;
@@ -906,14 +887,13 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setSound")    { setSound(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setGreeting") { ws.textAll(settings_manager->setGreeting(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setRingtone") { ws.textAll(settings_manager->setRingtone(doc["value"].as<bool>()).c_str()); return; }
-    if (doc["method"] == "setMute")     { setMute(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setRetain")   { ws.textAll(settings_manager->setRetain(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setChildLock"){ ws.textAll(settings_manager->setChildLock(doc["value"].as<bool>()).c_str()); return; }
-    if (doc["method"] == "setPhoneDisable") { setPhoneDisable(doc["value"].as<bool>()); return; }
     if (doc["method"] == "setSSID") { ws.textAll(settings_manager->setSSID(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setWIFIPassword") { ws.textAll(settings_manager->setWIFIPassword(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setServerType") {
       ws.textAll(settings_manager->setServerType(doc["value"].as<uint8_t>()).c_str());
+      settings_manager->SaveSettings(aFS);
       enable_mqtt(settings_manager->settings.server_type == 1);
       enable_tlg(settings_manager->settings.server_type == 2);    
       return;
@@ -986,6 +966,22 @@ void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uin
 void onREST(AsyncWebServerRequest *request) {
   json.clear();
   uint8_t params = request->params();
+  if (settings_manager->settings.web_auth) {
+    std::string login, password;
+    for(uint8_t i=0;i<params;i++) {
+      const AsyncWebParameter* p = request->getParam(i);
+      if(p->isFile()){
+        request->send(404);
+      } else {
+        if (p->name() == "login") login = p->value().c_str();
+        if (p->name() == "password") password = p->value().c_str();
+      }
+    }
+    if (!(login == settings_manager->settings.user_login && password == settings_manager->settings.user_passwd)) {
+      request->send(501, "text/html", "Access denied!");
+      return;
+    }
+  }
   for(uint8_t i=0;i<params;i++){
     const AsyncWebParameter* p = request->getParam(i);
     if(p->isFile()){
@@ -1042,11 +1038,6 @@ void onREST(AsyncWebServerRequest *request) {
       if (p->name() == "mqtt_name") {
         if (p->value() != "") ws.textAll(settings_manager->setDevName(p->value().c_str()).c_str());
         json["mqtt_name"] = settings_manager->settings.dev_name;
-        continue;
-      }
-      if (p->name() == "mute") {
-        if (p->value() != "") setMute(p->value() == "true");
-        json["mute"] = settings_manager->settings.mute;
         continue;
       }
       if (p->name() == "sys_delay") {
@@ -1112,6 +1103,8 @@ void onREST(AsyncWebServerRequest *request) {
         json["save"] = "ok";
         continue;
       }
+      if (p->name() == "login") continue;
+      if (p->name() == "password") continue;
       json[p->name().c_str()] = "method undefined";
       continue;
     }
@@ -1239,6 +1232,10 @@ void setup() {
   gpio_set_direction(detect_line, GPIO_MODE_INPUT);
   gpio_set_pull_mode(detect_line, GPIO_PULLUP_ONLY);
 
+  gpio_reset_pin(ape_line);
+  gpio_set_direction(ape_line, GPIO_MODE_INPUT);
+  gpio_set_pull_mode(ape_line, GPIO_PULLUP_ONLY);
+
   gpio_reset_pin(button_boot);
   gpio_set_direction(button_boot, GPIO_MODE_INPUT);
   gpio_set_pull_mode(button_boot, GPIO_FLOATING);
@@ -1246,6 +1243,10 @@ void setup() {
   gpio_reset_pin(relay_line);
   gpio_set_direction(relay_line, GPIO_MODE_OUTPUT);
   gpio_set_pull_mode(relay_line, GPIO_FLOATING);
+
+  gpio_reset_pin(relay_phone);
+  gpio_set_direction(relay_phone, GPIO_MODE_OUTPUT);
+  gpio_set_pull_mode(relay_phone, GPIO_FLOATING);
 
   gpio_reset_pin(switch_open);
   gpio_set_direction(switch_open, GPIO_MODE_OUTPUT);
@@ -1280,7 +1281,7 @@ void setup() {
   LOG("[%s] %s\n", TAG, "Settings init");
   settings_manager = new SettingsManager(SETTING_FILENAME);
   settings_manager->LoadSettings(aFS);
-  if (currentAction == WAIT) gpio_set_level(relay_line, !settings_manager->settings.address_counter && settings_manager->settings.phone_disable);
+  if (currentAction == WAIT) switch_line(!settings_manager->settings.address_counter && settings_manager->settings.modes<3);
 
   pcnt_config_t pcnt_config = {
       .pulse_gpio_num = detect_line,
@@ -1298,9 +1299,8 @@ void setup() {
   pcnt_set_filter_value(PCNT_UNIT_0, settings_manager->settings.impulse_filter);
   pcnt_filter_enable(PCNT_UNIT_0);
   pcnt_counter_pause(PCNT_UNIT_0);
-  pcnt_counter_clear(PCNT_UNIT_0);
-  pcnt_counter_resume(PCNT_UNIT_0);
-  attachInterrupt(detect_line, call_detector_isr, CHANGE);
+  attachInterrupt(detect_line, call_detector_isr, FALLING);
+  attachInterrupt(ape_line, ape_detector_isr, CHANGE);
 
   LOG("[%s] %s\n", TAG, "WiFi init");
   wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
@@ -1354,44 +1354,22 @@ void loop() {
     }
   }
  
-/*
-  if (currentAction != WAIT) doAction(millis()-detectMillis); 
-  else if (settings_manager->settings.address_counter) {
-    if (syncCounter) {
-      if (millis() - reset_time > 190) {
-        pcnt_get_counter_value(PCNT_UNIT_0, &currentAddressCounter);
-        if (currentAddressCounter) {
-          triggerCounter = settings_manager->settings.address_counter == currentAddressCounter;
-          if (triggerCounter) {
-            gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
-            calling_detect();
-          }
-          LOG("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
-        }
-        syncCounter = false;
-      }
-    }
-  }
-*/
   if (currentAction != WAIT) doAction(millis()-detectMillis); 
   else if (settings_manager->settings.address_counter) {
     if (syncCounter && !finishCounter) {
-      if (millis() - reset_time > settings_manager->settings.counter_duration) {
+      if (millis() - sync_time > settings_manager->settings.counter_duration) {
         pcnt_get_counter_value(PCNT_UNIT_0, &currentAddressCounter);
+        pcnt_counter_pause(PCNT_UNIT_0);
         finishCounter = true;
+        syncCounter = false;
         if (currentAddressCounter) {
           triggerCounter = settings_manager->settings.address_counter == currentAddressCounter;
           if (triggerCounter) {
-            gpio_set_level(relay_line, settings_manager->settings.phone_disable); 
+            gpio_set_level(relay_line, settings_manager->settings.modes<3); 
             calling_detect();
           }
           LOG("[%s] Select address: %d, counter: %d\n", TAG, settings_manager->settings.address_counter, currentAddressCounter);
         } else LOG("[%s] Select address: %d, counter: not detect\n", TAG, settings_manager->settings.address_counter);
-      }
-    } else if (finishCounter) { //Если досчитали
-      if (millis() - reset_time > settings_manager->settings.counter_duration) { //Если прошло немного времени, то скидываем флаги, для новых подвигов
-        syncCounter = false;
-        finishCounter = false;
       }
     }
   }

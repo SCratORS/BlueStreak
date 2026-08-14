@@ -35,8 +35,9 @@ void SettingsManager::CheckDefault() {
     if (settings.greeting_delay == 0) settings.greeting_delay = 1000;
     if (settings.delay_system == 0) settings.delay_system = 500;
     if (settings.mqtt_port == 0) settings.mqtt_port = 1883;
-    if (settings.counter_duration == 0) settings.counter_duration = 190;
+    if (settings.counter_duration == 0) settings.counter_duration = 500;
     if (settings.impulse_filter == 0) settings.impulse_filter = 100;
+    if (settings.sync_duration == 0) settings.sync_duration = 200;
 }
 
 void SettingsManager::LoadSettings(fs::FS aFS) {
@@ -54,10 +55,8 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.reject_call = json["reject_call"].as<bool>();
         settings.led = json["led"].as<bool>();
         settings.sound = json["sound"].as<bool>();
-        settings.mute = json["mute"].as<bool>();
         settings.greeting = json["greeting"].as<bool>();
         settings.ringtone = json["ringtone"].as<bool>();
-        settings.phone_disable = json["phone_disable"].as<bool>();
         settings.modes = json["modes"].as<uint8_t>();
         settings.server_type = json["server_type"].as<uint8_t>();
         settings.delay_system = json["delay_system"].as<uint16_t>();
@@ -91,12 +90,57 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.reboot_timeout = json["reboot_timeout"].as<uint8_t>();
         settings.counter_duration = json["counter_duration"].as<uint16_t>();
         settings.impulse_filter = json["impulse_filter"].as<uint16_t>();
+        settings.sync_duration = json["sync_duration"].as<uint16_t>();
         CheckDefault();
         last_error = 0;
     }
     file.close();
 }
 
+void SettingsManager::JsonFill() {
+    json.clear();
+    json["accept_call"] = settings.accept_call;
+    json["delivery"] = settings.delivery;
+    json["reject_call"] = settings.reject_call;
+    json["led"] = settings.led;
+    json["sound"] = settings.sound;
+    json["greeting"] = settings.greeting;
+    json["ringtone"] = settings.ringtone;
+    json["modes"] = settings.modes;
+    json["server_type"] = settings.server_type;
+    json["delay_system"] = settings.delay_system;
+    json["delay_before"] = settings.delay_before;
+    json["delay_open"] = settings.delay_open;
+    json["delay_after"] = settings.delay_after;
+    json["delay_filter"] = settings.delay_filter;
+    json["call_end_delay"] = settings.call_end_delay;
+    json["greeting_delay"] = settings.greeting_delay;
+    json["mqtt_port"] = settings.mqtt_port;
+    json["ssid"] = settings.wifi_ssid;
+    json["wifi_passwd"] = settings.wifi_passwd;
+    json["mqtt_server"] = settings.mqtt_server;
+    json["mqtt_login"] = settings.mqtt_login;
+    json["mqtt_passwd"] = settings.mqtt_passwd;
+    json["tlg_token"] = settings.tlg_token;
+    json["tlg_user"] = settings.tlg_user;
+    json["access_code"] = settings.access_code;
+    json["user_login"] = settings.user_login;
+    json["user_passwd"] = settings.user_passwd;
+    json["web_auth"] = settings.web_auth;
+    json["mqtt_retain"] = settings.mqtt_retain;
+    json["child_lock"] = settings.child_lock;
+    json["access_code_lifetime"] = settings.access_code_lifetime;
+    json["address_counter"] = settings.address_counter;
+    json["syslog"] = settings.syslog;
+    json["syslog_port"] = settings.syslog_port;
+    json["syslog_server"] = settings.syslog_server;
+    json["force_open"] = settings.force_open;
+    json["dev_name"] = settings.dev_name;
+    json["reboot_timeout"] = settings.reboot_timeout;
+    json["counter_duration"] = settings.counter_duration;
+    json["impulse_filter"] = settings.impulse_filter;
+    json["sync_duration"] = settings.sync_duration;
+}
 
 void SettingsManager::SaveSettings(fs::FS aFS) {
   File file = aFS.open(filename.c_str(), FILE_WRITE);
@@ -104,49 +148,7 @@ void SettingsManager::SaveSettings(fs::FS aFS) {
     last_error = 4;
     LOG("[%s] Can't save settings\n", TAG);
   } else {
-        json.clear();
-        json["accept_call"] = settings.accept_call;
-        json["delivery"] = settings.delivery;
-        json["reject_call"] = settings.reject_call;
-        json["led"] = settings.led;
-        json["sound"] = settings.sound;
-        json["greeting"] = settings.greeting;
-        json["ringtone"] = settings.ringtone;
-        json["mute"] = settings.mute;
-        json["phone_disable"] = settings.phone_disable;
-        json["modes"] = settings.modes;
-        json["server_type"] = settings.server_type;
-        json["delay_system"] = settings.delay_system;
-        json["delay_before"] = settings.delay_before;
-        json["delay_open"] = settings.delay_open;
-        json["delay_after"] = settings.delay_after;
-        json["delay_filter"] = settings.delay_filter;
-        json["call_end_delay"] = settings.call_end_delay;
-        json["greeting_delay"] = settings.greeting_delay;
-        json["mqtt_port"] = settings.mqtt_port;
-        json["ssid"] = settings.wifi_ssid;
-        json["wifi_passwd"] = settings.wifi_passwd;
-        json["mqtt_server"] = settings.mqtt_server;
-        json["mqtt_login"] = settings.mqtt_login;
-        json["mqtt_passwd"] = settings.mqtt_passwd;
-        json["tlg_token"] = settings.tlg_token;
-        json["tlg_user"] = settings.tlg_user;
-        json["access_code"] = settings.access_code;
-        json["user_login"] = settings.user_login;
-        json["user_passwd"] = settings.user_passwd;
-        json["web_auth"] = settings.web_auth;
-        json["mqtt_retain"] = settings.mqtt_retain;
-        json["child_lock"] = settings.child_lock;
-        json["access_code_lifetime"] = settings.access_code_lifetime;
-        json["address_counter"] = settings.address_counter;
-        json["syslog"] = settings.syslog;
-        json["syslog_port"] = settings.syslog_port;
-        json["syslog_server"] = settings.syslog_server;
-        json["force_open"] = settings.force_open;
-        json["dev_name"] = settings.dev_name;
-        json["reboot_timeout"] = settings.reboot_timeout;
-        json["counter_duration"] = settings.counter_duration;
-        json["impulse_filter"] = settings.impulse_filter;
+        JsonFill();
         serializeJson(json, file);
         last_error = 0;
   }
@@ -161,11 +163,9 @@ void SettingsManager::ResetSettings() {
     settings.reject_call = false;
     settings.led = true;
     settings.sound = true;
-    settings.mute = false;
     settings.greeting = false;
     settings.ringtone = false;
-    settings.phone_disable = false;
-    settings.modes = 0;
+    settings.modes = 3;
     settings.server_type = 0;
     settings.delay_system = 500;
     settings.delay_before = 1000;
@@ -196,55 +196,15 @@ void SettingsManager::ResetSettings() {
     settings.force_open = false;
     settings.dev_name = "smartintercom";
     settings.reboot_timeout = 0;
-    settings.counter_duration = 190;
+    settings.counter_duration = 500;
     settings.impulse_filter = 100;
+    settings.sync_duration = 200;
     last_error = 0;
 }
 
 std::string SettingsManager::getSettings(){
-    json.clear();
-    json["accept_call"] = settings.accept_call;
-    json["delivery"] = settings.delivery;
-    json["reject_call"] = settings.reject_call;
-    json["led"] = settings.led;
-    json["sound"] = settings.sound;
-    json["greeting"] = settings.greeting;
-    json["ringtone"] = settings.ringtone;
-    json["mute"] = settings.mute;
-    json["phone_disable"] = settings.phone_disable;
-    json["modes"] = settings.modes;
-    json["server_type"] = settings.server_type;
-    json["delay_system"] = settings.delay_system;
-    json["delay_before"] = settings.delay_before;
-    json["delay_open"] = settings.delay_open;
-    json["delay_after"] = settings.delay_after;
-    json["delay_filter"] = settings.delay_filter;
-    json["call_end_delay"] = settings.call_end_delay;
-    json["greeting_delay"] = settings.greeting_delay;
-    json["mqtt_port"] = settings.mqtt_port;
-    json["ssid"] = settings.wifi_ssid;
-    json["wifi_passwd"] = settings.wifi_passwd;
-    json["mqtt_server"] = settings.mqtt_server;
-    json["mqtt_login"] = settings.mqtt_login;
-    json["mqtt_passwd"] = settings.mqtt_passwd;
-    json["tlg_token"] = settings.tlg_token;
-    json["tlg_user"] = settings.tlg_user;
+    JsonFill();
     json["access_code"] = settings.access_code==""?"------":settings.access_code;
-    json["access_code_lifetime"] = settings.access_code_lifetime;
-    json["user_login"] = settings.user_login;
-    json["user_passwd"] = settings.user_passwd;
-    json["web_auth"] = settings.web_auth;
-    json["child_lock"] = settings.child_lock;
-    json["mqtt_retain"] = settings.mqtt_retain;
-    json["address_counter"] = settings.address_counter;
-    json["syslog"] = settings.syslog;
-    json["syslog_port"] = settings.syslog_port;
-    json["syslog_server"] = settings.syslog_server;
-    json["force_open"] = settings.force_open;
-    json["dev_name"] = settings.dev_name;
-    json["reboot_timeout"] = settings.reboot_timeout;
-    json["counter_duration"] = settings.counter_duration;
-    json["impulse_filter"] = settings.impulse_filter;
     serializeJson(json, message);
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
@@ -385,19 +345,6 @@ std::string SettingsManager::setSound(bool value) {
     return message;
 }
 
-std::string SettingsManager::setMute(bool value) {
-    settings.mute = value;
-    message = "{\"mute\":" + std::string(settings.mute?"true":"false") + "}";
-    LOG("[%s] %s\n", TAG, message.c_str());
-    return message;
-}
-
-std::string SettingsManager::setPhoneDisable(bool value) {
-    settings.phone_disable = value;
-    message = "{\"phone_disable\":" + std::string(settings.phone_disable?"true":"false") + "}";
-    LOG("[%s] %s\n", TAG, message.c_str());
-    return message;
-}
 
 std::string SettingsManager::setSSID(std::string value) {
     settings.wifi_ssid = value;
