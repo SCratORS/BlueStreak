@@ -826,6 +826,7 @@ void save_settings(){
   settings_manager->SaveSettings(aFS);
   wifi_manager->setSSID(settings_manager->settings.wifi_ssid);
   wifi_manager->setPasswd(settings_manager->settings.wifi_passwd);
+  wifi_manager->setBSSID(settings_manager->settings.wifi_bssid);
   enable_mqtt(false);
   enable_tlg(false);
   enable_syslog(false);
@@ -891,6 +892,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     if (doc["method"] == "setChildLock"){ ws.textAll(settings_manager->setChildLock(doc["value"].as<bool>()).c_str()); return; }
     if (doc["method"] == "setSSID") { ws.textAll(settings_manager->setSSID(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setWIFIPassword") { ws.textAll(settings_manager->setWIFIPassword(doc["value"].as<std::string>()).c_str()); return; }
+    if (doc["method"] == "setBSSID") { ws.textAll(settings_manager->setBSSID(doc["value"].as<std::string>()).c_str()); return; }
     if (doc["method"] == "setServerType") {
       ws.textAll(settings_manager->setServerType(doc["value"].as<uint8_t>()).c_str());
       settings_manager->SaveSettings(aFS);
@@ -1303,7 +1305,10 @@ void setup() {
   attachInterrupt(ape_line, ape_detector_isr, CHANGE);
 
   LOG("[%s] %s\n", TAG, "WiFi init");
-  wifi_manager = new WiFiManager(settings_manager->settings.wifi_ssid, settings_manager->settings.wifi_passwd);
+  wifi_manager = new WiFiManager(
+      settings_manager->settings.wifi_ssid,
+      settings_manager->settings.wifi_passwd,
+      settings_manager->settings.wifi_bssid);
   if (!hw_status.web_services_init) web_server_init();
   LOG("[%s] %s\n", TAG, "Web services init complete");
   xTaskCreatePinnedToCore(wifi_loop, "WiFi infinity loops", 4096, NULL, tskIDLE_PRIORITY,  &wifiTask, tskNO_AFFINITY);

@@ -8,11 +8,12 @@
 
 class WiFiManager {
     public:
-        WiFiManager(std::string ssid, std::string passwd);
+        WiFiManager(const std::string &ssid, const std::string &passwd, const std::string &bssid);
         ~WiFiManager();
         void handle();
-        void setPasswd(std::string passwd);
-        void setSSID(std::string ssid);
+        void setPasswd(const std::string &passwd);
+        void setSSID(const std::string &ssid);
+        void setBSSID(const std::string &value);
         void disconnect();
         std::string ip;
         uint8_t last_error;
@@ -27,4 +28,6 @@ class WiFiManager {
         uint64_t timer;
         std::string ssid;
         std::string passwd;
+        uint8_t bssid[6];
+        bool use_bssid = false;
 };

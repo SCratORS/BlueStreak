@@ -15,6 +15,7 @@ SettingsManager::~SettingsManager() {
 void SettingsManager::CheckDefault() {
     if (settings.wifi_ssid == "null") settings.wifi_ssid = "";
     if (settings.wifi_passwd == "null") settings.wifi_passwd = "";
+    if (settings.wifi_bssid == "null") settings.wifi_bssid = "";
     if (settings.mqtt_server == "null") settings.mqtt_server = "";
     if (settings.mqtt_login == "null") settings.mqtt_login = "";
     if (settings.mqtt_passwd == "null") settings.mqtt_passwd = "";
@@ -69,6 +70,7 @@ void SettingsManager::LoadSettings(fs::FS aFS) {
         settings.mqtt_port = json["mqtt_port"].as<uint16_t>();
         settings.wifi_ssid = json["ssid"].as<std::string>();
         settings.wifi_passwd = json["wifi_passwd"].as<std::string>();
+        settings.wifi_bssid = json["bssid"].as<std::string>();
         settings.mqtt_server = json["mqtt_server"].as<std::string>();
         settings.mqtt_login = json["mqtt_login"].as<std::string>();
         settings.mqtt_passwd = json["mqtt_passwd"].as<std::string>();
@@ -118,6 +120,7 @@ void SettingsManager::JsonFill() {
     json["mqtt_port"] = settings.mqtt_port;
     json["ssid"] = settings.wifi_ssid;
     json["wifi_passwd"] = settings.wifi_passwd;
+    json["bssid"] = settings.wifi_bssid;
     json["mqtt_server"] = settings.mqtt_server;
     json["mqtt_login"] = settings.mqtt_login;
     json["mqtt_passwd"] = settings.mqtt_passwd;
@@ -177,6 +180,7 @@ void SettingsManager::ResetSettings() {
     settings.mqtt_port = 1883;
     settings.wifi_ssid = "";
     settings.wifi_passwd = "";
+    settings.wifi_bssid = "";
     settings.mqtt_server = "";
     settings.mqtt_login = "";
     settings.mqtt_passwd = "";
@@ -356,6 +360,13 @@ std::string SettingsManager::setSSID(std::string value) {
 std::string SettingsManager::setWIFIPassword(std::string value) {
     settings.wifi_passwd = value;
     message = "{\"wifi_passwd\":\"" + settings.wifi_passwd + "\"}";
+    LOG("[%s] %s\n", TAG, message.c_str());
+    return message;
+}
+
+std::string SettingsManager::setBSSID(std::string value) {
+    settings.wifi_bssid = value;
+    message = "{\"bssid\":\"" + settings.wifi_bssid + "\"}";
     LOG("[%s] %s\n", TAG, message.c_str());
     return message;
 }

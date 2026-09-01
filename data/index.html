@@ -211,6 +211,13 @@
           <input id="wifi_passwd" type="password" class="text right" title="wifi_passwd" placeholder="Пароль Wi-Fi сети" onchange="sendCommand('setWIFIPassword',this.value)">
         </div>
       </div>
+      <div class = "panel top control no-padding-bottom">
+        <div class = "icon icon_wifi"></div>
+        <div class = "text">BSSID<div class = "text sub-title">MAC точки доступа (необязательно)</div></div>
+        <div class="custom-input right">
+          <input id="bssid" type="text" class="text right" title="bssid" placeholder="AA:BB:CC:DD:EE:FF" pattern="([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}" oninvalid="this.setCustomValidity('Неправильный MAC-адрес')" oninput="this.setCustomValidity('')" onchange="if(this.reportValidity()) sendCommand('setBSSID',this.value)">
+        </div>
+      </div>
       <div id="ip" class = "panel top control add-margin">
         <div id="icon" class = "icon icon_ip"></div>
         <div class = "text">IP адрес<div class = "text sub-title">Адрес устройства в сети</div></div>

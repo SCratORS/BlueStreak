@@ -77,6 +77,7 @@ class SettingsManager {
             const uint16_t delay_before_open_door = 100;
             std::string wifi_ssid = "";
             std::string wifi_passwd = "";
+            std::string wifi_bssid = "";
             std::string mqtt_server = "";
             uint16_t mqtt_port = 1883;
             std::string mqtt_login = "";
@@ -117,6 +118,7 @@ class SettingsManager {
         std::string setPhoneDisable(bool value);
         std::string setSSID(std::string value);
         std::string setWIFIPassword(std::string value);
+        std::string setBSSID(std::string value);
         std::string setServerType(uint8_t value);
         std::string setMQTTServer(std::string value);
         std::string setMQTTPort(uint16_t value);
