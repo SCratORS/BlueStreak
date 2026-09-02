@@ -3,21 +3,40 @@
 static const char* TAG = "WIFI";
 extern void LOG(const char * format, ...);
 
-WiFiManager::WiFiManager(std::string ssid, std::string passwd) {
-    this->ssid = ssid;
-    this->passwd = passwd;
+static uint8_t hex(uint8_t value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    value |= 0x20;
+    return value >= 'a' && value <= 'f' ? value - 'a' + 10 : 16;
+}
+
+WiFiManager::WiFiManager(const std::string &ssid, const std::string &passwd, const std::string &bssid)
+    : ssid(ssid), passwd(passwd) {
+    setBSSID(bssid);
     last_error = 1;
     WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
     WiFi.setHostname(CONFIG_CHIP_DEVICE_PRODUCT_NAME);
     handle();
 }
 
-void WiFiManager::setPasswd(std::string passwd) {
+void WiFiManager::setPasswd(const std::string &passwd) {
     this->passwd = passwd;
 };
 
-void WiFiManager::setSSID(std::string ssid) {
+void WiFiManager::setSSID(const std::string &ssid) {
     this->ssid = ssid;
+};
+
+void WiFiManager::setBSSID(const std::string &value) {
+    use_bssid = false;
+    if (value.length() != 17) return;
+    for (uint8_t i = 0; i < 6; i++) {
+        uint8_t offset = i * 3;
+        uint8_t high = hex(value[offset]);
+        uint8_t low = hex(value[offset + 1]);
+        if (high > 15 || low > 15 || (i < 5 && value[offset + 2] != ':')) return;
+        bssid[i] = high << 4 | low;
+    }
+    use_bssid = true;
 };
 
 void WiFiManager::disconnect() {
@@ -35,7 +54,7 @@ void WiFiManager::handle()   {
             }
             WiFi.disconnect();
             LOG("[%s] Connecting to SSID: %s\n", TAG, ssid.c_str());
-            WiFi.begin(ssid.c_str(), passwd.c_str());
+            WiFi.begin(ssid.c_str(), passwd.c_str(), 0, use_bssid ? bssid : nullptr);
             timer = millis();
             status.connecting_wifi = true;
         } else { //Подключение запущено
