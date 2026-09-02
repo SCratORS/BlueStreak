@@ -1170,16 +1170,16 @@ void web_server_init() {
   server.on(SETTING_FILENAME, HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(501, "text/html", "Access denied!");
   });
+  auto &media = server.serveStatic("/media/", aFS, "/media/")
+                      .setCacheControl("no-store");
+  auto &files = server.serveStatic("/", aFS, "/")
+                      .setCacheControl("max-age=604800")
+                      .setDefaultFile("index.html");
   if (settings_manager->settings.web_auth) {
-    server.serveStatic("/", aFS, "/")
-          .setCacheControl("max-age=604800") // 1 неделя;
-          .setDefaultFile("index.html")
-          .setAuthentication(settings_manager->settings.user_login.c_str(), settings_manager->settings.user_passwd.c_str());
-          
-  } else {
-    server.serveStatic("/", aFS, "/")
-      .setCacheControl("max-age=604800") // 1 неделя;
-      .setDefaultFile("index.html");
+    const char *login = settings_manager->settings.user_login.c_str();
+    const char *passwd = settings_manager->settings.user_passwd.c_str();
+    media.setAuthentication(login, passwd);
+    files.setAuthentication(login, passwd);
   }
   server.onNotFound(onRequest);
   server.onFileUpload(onUpload);
